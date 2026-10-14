@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jira Script Generator | Assistente IA de Chamados</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#ecfdf5',
+              100: '#d1fae5',
+              500: '#10b981',
+              600: '#059669',
+              700: '#047857',
+              800: '#065f46',
+              900: '#064e3b'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased selection:bg-emerald-500 selection:text-white">
+
+  <!-- Header -->
+  <header class="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center space-x-3">
+        <div class="h-9 w-9 rounded-lg bg-gradient-to-tr from-emerald-500 to-cyan-500 flex items-center justify-center font-bold text-white shadow-lg shadow-emerald-500/20">
+          ⚡
+        </div>
+        <div>
+          <h1 class="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+            Jira Script Generator
+            <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              Console 1-Click
+            </span>
+          </h1>
+          <p class="text-xs text-slate-400">Gere o código para preencher chamados no Jira sem integrações externas</p>
+        </div>
+      </div>
+
+      <!-- Tipo de Chamado (Presets) -->
+      <div class="flex items-center bg-slate-800/80 p-1 rounded-xl border border-slate-700/60" id="typeSelector">
+        <button type="button" data-preset="bug" class="preset-btn px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all-fast flex items-center gap-1.5 bg-emerald-500 text-white shadow-sm">
+          <span>🐛</span> Bug
+        </button>
+        <button type="button" data-preset="feature" class="preset-btn px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all-fast flex items-center gap-1.5 text-slate-300 hover:text-white hover:bg-slate-700/50">
+          <span>✨</span> Feature
+        </button>
+        <button type="button" data-preset="hotfix" class="preset-btn px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all-fast flex items-center gap-1.5 text-slate-300 hover:text-white hover:bg-slate-700/50">
+          <span>⚡</span> Hotfix
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Container Principal -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+    <!-- Painel de Campos Pré-fixados / Configuração Rápida -->
+    <details class="bg-slate-900/50 border border-slate-800/90 rounded-2xl p-4 transition-all duration-200 group">
+      <summary class="flex items-center justify-between cursor-pointer list-none select-none">
+        <div class="flex items-center gap-2.5 text-sm font-medium text-slate-300">
+          <span class="text-emerald-400 text-base">⚙️</span>
+          <span>Campos Padrão Pré-fixados:</span>
+          <span class="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-400" id="summaryFields">
+            Cliente: Nina | Produto: ninachat | Prioridade: Baixa | Repr: Wander
+          </span>
+        </div>
+        <div class="flex items-center gap-2 text-xs text-slate-400 group-open:text-emerald-400 transition-colors">
+          <span>Editar valores padrão</span>
+          <span class="transform transition-transform group-open:rotate-180">▼</span>
+        </div>
+      </summary>
+
+      <div class="mt-4 pt-4 border-t border-slate-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 mb-1">Cliente</label>
+          <input type="text" id="fieldCliente" value="Nina" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 mb-1">Produto</label>
+          <input type="text" id="fieldProduto" value="ninachat" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 mb-1">Prioridade</label>
+          <select id="fieldPrioridade" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500">
+            <option value="Baixa" selected>Baixa</option>
+            <option value="Média">Média</option>
+            <option value="Alta">Alta</option>
+            <option value="Crítica">Crítica</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 mb-1">Representante</label>
+          <input type="text" id="fieldRepresentante" value="Wander" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 mb-1">Número do Chamado</label>
+          <input type="text" id="fieldNumeroChamado" value="-" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500">
+        </div>
+      </div>
+
+      <div class="mt-3.5 flex justify-end">
+        <button type="button" id="btnSavePreset" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white px-3 py-1.5 rounded-lg border border-slate-700 transition-colors flex items-center gap-1.5">
+          <span>💾</span> Salvar como Padrão deste Tipo
+        </button>
+      </div>
+    </details>
+
+    <!-- Grid Principal (2 Colunas) -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+      <!-- Coluna da Esquerda: Explicação Bruta & Campos Estruturados (7 cols) -->
+      <div class="lg:col-span-7 space-y-6">
+
+        <!-- 1. Explicação Bruta -->
+        <div class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 space-y-3 shadow-sm">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-bold border border-emerald-500/20">1</span>
+              <h2 class="text-sm sm:text-base font-semibold text-white">Explicação Bruta</h2>
+            </div>
+            <span class="text-xs text-slate-400">Escreva livremente sem se preocupar com formato</span>
+          </div>
+
+          <textarea id="rawText" rows="4" placeholder="Ex: O bloco de agendar tarefa está dando erro quando a flag de integração não está ativa, mas ele deveria funcionar sem ela..." class="w-full bg-slate-950 border border-slate-700/80 rounded-xl p-3 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors leading-relaxed"></textarea>
+
+          <div class="flex items-center justify-between pt-1">
+            <button type="button" id="btnClearRaw" class="text-xs text-slate-400 hover:text-slate-200 transition-colors">
+              Limpar texto
+            </button>
+            <button type="button" id="btnEnhance" class="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-medium px-4 py-2 rounded-xl text-xs sm:text-sm shadow-md shadow-emerald-950 transition-all-fast flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+              <span id="btnEnhanceIcon">✨</span>
+              <span id="btnEnhanceText">Aprimorar com IA</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 2. Campos Técnicos Estruturados -->
+        <div class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-sm">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-bold border border-emerald-500/20">2</span>
+              <h2 class="text-sm sm:text-base font-semibold text-white">Campos Estruturados (Editáveis)</h2>
+            </div>
+            <span class="text-xs text-slate-400">O script atualiza em tempo real</span>
+          </div>
+
+          <!-- Título -->
+          <div class="space-y-1.5">
+            <label class="block text-xs font-semibold text-slate-300">
+              Título do Chamado
+            </label>
+            <input type="text" id="ticketTitle" placeholder="Ex: [ninachat] - Falha ao utilizar bloco sem flag de integração ativa" class="w-full bg-slate-950 border border-slate-700/80 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors">
+          </div>
+
+          <!-- Descrição Estruturada -->
+          <div class="space-y-1.5">
+            <label class="block text-xs font-semibold text-slate-300">
+              Descrição Estruturada
+            </label>
+            <textarea id="ticketDescription" rows="8" placeholder="Contexto:&#10;...&#10;&#10;Passos para reprodução:&#10;1. ...&#10;&#10;Comportamento Esperado vs Obtido:&#10;..." class="w-full bg-slate-950 border border-slate-700/80 rounded-xl p-3 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors leading-relaxed font-mono text-xs"></textarea>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Coluna da Direita: Script Gerado & Ação Rápida de Cópia (5 cols) -->
+      <div class="lg:col-span-5 space-y-4 lg:sticky lg:top-24">
+
+        <!-- Botão de Destaque Máximo -->
+        <button type="button" id="btnBigCopy" class="w-full bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-bold py-4 px-6 rounded-2xl shadow-xl shadow-emerald-500/20 glow-emerald flex items-center justify-center gap-3 transition-all-fast text-base sm:text-lg cursor-pointer transform active:scale-[0.99]">
+          <span class="text-xl" id="bigCopyIcon">📋</span>
+          <span id="bigCopyText">Copiar Código para o Console</span>
+        </button>
+
+        <!-- Caixa Visual de Código -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-lg">
+          <!-- Barra Superior do Código -->
+          <div class="bg-slate-950/80 px-4 py-2.5 border-b border-slate-800 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <div class="flex space-x-1.5">
+                <div class="w-2.5 h-2.5 rounded-full bg-red-500/80"></div>
+                <div class="w-2.5 h-2.5 rounded-full bg-yellow-500/80"></div>
+                <div class="w-2.5 h-2.5 rounded-full bg-green-500/80"></div>
+              </div>
+              <span class="text-xs font-mono text-slate-400 ml-1">jira_fill_script.js</span>
+            </div>
+
+            <button type="button" id="btnSmallCopy" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-2.5 py-1 rounded-lg border border-slate-700/80 flex items-center gap-1.5 transition-colors">
+              <span id="smallCopyIcon">📋</span>
+              <span id="smallCopyText">Copiar</span>
+            </button>
+          </div>
+
+          <!-- Bloco do Script -->
+          <div class="p-3.5 bg-slate-950/95 max-h-[460px] overflow-auto">
+            <pre class="text-xs text-emerald-400 font-mono whitespace-pre-wrap break-all select-all leading-relaxed"><code id="codeOutput">// O script será gerado aqui automaticamente...</code></pre>
+          </div>
+        </div>
+
+        <!-- Instruções Rápidas de Uso -->
+        <div class="bg-slate-900/50 border border-slate-800/80 rounded-2xl p-4 text-xs text-slate-400 space-y-2">
+          <div class="font-semibold text-slate-200 flex items-center gap-1.5">
+            <span>💡</span> Como colar no Jira em 3 passos:
+          </div>
+          <ol class="space-y-1.5 pl-4 list-decimal text-slate-400">
+            <li>Abra a página do formulário de chamado no Jira</li>
+            <li>Pressione <kbd class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-200 border border-slate-700">F12</kbd> e clique na aba <b class="text-slate-200">Console</b></li>
+            <li>Cole o código (<kbd class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-200 border border-slate-700">Ctrl + V</kbd>) e aperte <kbd class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-200 border border-slate-700">Enter</kbd></li>
+          </ol>
+          <p class="text-[11px] text-slate-500 pt-1">
+            * O script preenche tudo e fixa os seletores React com segurança. Ele <b>nunca clica em Enviar</b>.
+          </p>
+        </div>
+
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Toast de Notificação -->
+  <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 pointer-events-none transition-all duration-300 bg-emerald-500 text-slate-950 px-4 py-2.5 rounded-xl font-semibold shadow-2xl flex items-center gap-2 text-sm">
+    <span id="toastIcon">✅</span>
+    <span id="toastMsg">Código copiado com sucesso!</span>
+  </div>
+
+  <!-- Scripts -->
+  <script src="script_generator.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
