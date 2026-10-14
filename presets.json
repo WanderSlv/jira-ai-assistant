@@ -1,0 +1,44 @@
+{
+  "activePreset": "bug",
+  "presets": {
+    "bug": {
+      "name": "Registro de Bugs",
+      "icon": "🐛",
+      "formUrl": "https://ninatecnologia.atlassian.net/jira/software/c/projects/AUTO/form/34",
+      "defaultFields": {
+        "Cliente": "Nina",
+        "Produto": "ninachat",
+        "Prioridade": "Baixa",
+        "Representante": "Wander",
+        "NumeroChamado": "-"
+      },
+      "systemPrompt": "Você é um especialista em QA. Transforme a explicação em um bug claro e objetivo com Título ([Módulo] - Resumo) e Descrição (Contexto, Passos para Reproduzir, Esperado vs Obtido)."
+    },
+    "feature": {
+      "name": "Solicitação de Feature",
+      "icon": "✨",
+      "formUrl": "",
+      "defaultFields": {
+        "Cliente": "Nina",
+        "Produto": "ninachat",
+        "Prioridade": "Média",
+        "Representante": "Wander",
+        "NumeroChamado": "-"
+      },
+      "systemPrompt": "Você é um Product Manager. Estruture em Título ([Módulo] - Nova Funcionalidade) e Descrição (Objetivo, Critérios de Aceite e Regras de Negócio)."
+    },
+    "hotfix": {
+      "name": "Hotfix / Incidente Crítico",
+      "icon": "⚡",
+      "formUrl": "",
+      "defaultFields": {
+        "Cliente": "Nina",
+        "Produto": "ninachat",
+        "Prioridade": "Alta",
+        "Representante": "Wander",
+        "NumeroChamado": "-"
+      },
+      "systemPrompt": "Você é um Engenheiro SRE. Estruture em Título ([HOTFIX] - Correção) e Descrição (Impacto, Causa Raiz e Ação Imediata Necessária)."
+    }
+  }
+}
