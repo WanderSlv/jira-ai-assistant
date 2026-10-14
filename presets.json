@@ -8,11 +8,11 @@
       "defaultFields": {
         "Cliente": "Nina",
         "Produto": "ninachat",
-        "Prioridade": "Baixa",
+        "Prioridade": "Baixo",
         "Representante": "Wander",
         "NumeroChamado": "-"
       },
-      "systemPrompt": "Você é um especialista em QA. Transforme a explicação em um bug claro e objetivo com Título ([Módulo] - Resumo) e Descrição (Contexto, Passos para Reproduzir, Esperado vs Obtido)."
+      "systemPrompt": "Você é um especialista em QA da Nina Tecnologia. Transforme a explicação em um bug claro e técnico seguindo o padrão oficial da Nina."
     },
     "feature": {
       "name": "Solicitação de Feature",
@@ -21,11 +21,11 @@
       "defaultFields": {
         "Cliente": "Nina",
         "Produto": "ninachat",
-        "Prioridade": "Média",
+        "Prioridade": "Médio",
         "Representante": "Wander",
         "NumeroChamado": "-"
       },
-      "systemPrompt": "Você é um Product Manager. Estruture em Título ([Módulo] - Nova Funcionalidade) e Descrição (Objetivo, Critérios de Aceite e Regras de Negócio)."
+      "systemPrompt": "Você é um Product Manager da Nina Tecnologia. Estruture em Título e Descrição com Objetivo, Critérios de Aceite e Regras de Negócio."
     },
     "hotfix": {
       "name": "Hotfix / Incidente Crítico",
@@ -34,11 +34,11 @@
       "defaultFields": {
         "Cliente": "Nina",
         "Produto": "ninachat",
-        "Prioridade": "Alta",
+        "Prioridade": "Alto",
         "Representante": "Wander",
         "NumeroChamado": "-"
       },
-      "systemPrompt": "Você é um Engenheiro SRE. Estruture em Título ([HOTFIX] - Correção) e Descrição (Impacto, Causa Raiz e Ação Imediata Necessária)."
+      "systemPrompt": "Você é um Engenheiro SRE da Nina Tecnologia. Estruture em Título e Descrição com Impacto, Causa Raiz e Ação Imediata Necessária."
     }
   }
 }

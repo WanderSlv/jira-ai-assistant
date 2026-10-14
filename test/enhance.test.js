@@ -8,6 +8,7 @@ const originalApiKey = process.env.GEMINI_API_KEY;
 
 test.before(async () => {
   // Garantir que a chave está vazia para testar o fallback local
+  process.env.NODE_ENV = 'test';
   delete process.env.GEMINI_API_KEY;
   await new Promise((resolve) => {
     server = app.listen(0, () => {

@@ -22,7 +22,7 @@ function generateJiraScript(options = {}) {
 
   const cliente = fields.Cliente || 'Nina';
   const produto = fields.Produto || 'ninachat';
-  const prioridade = fields.Prioridade || 'Baixa';
+  const prioridade = fields.Prioridade || 'Baixo';
   const representante = fields.Representante || 'Wander';
   const numeroChamado = fields.NumeroChamado || '-';
 

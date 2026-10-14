@@ -8,7 +8,7 @@
     currentFields: {
       Cliente: 'Nina',
       Produto: 'ninachat',
-      Prioridade: 'Baixa',
+      Prioridade: 'Baixo',
       Representante: 'Wander',
       NumeroChamado: '-'
     },
@@ -65,7 +65,7 @@
     state.currentFields = {
       Cliente: elements.fieldCliente.value.trim() || 'Nina',
       Produto: elements.fieldProduto.value.trim() || 'ninachat',
-      Prioridade: elements.fieldPrioridade.value || 'Baixa',
+      Prioridade: elements.fieldPrioridade.value || 'Baixo',
       Representante: elements.fieldRepresentante.value.trim() || 'Wander',
       NumeroChamado: elements.fieldNumeroChamado.value.trim() || '-'
     };
@@ -78,7 +78,7 @@
     if (!fields) return;
     elements.fieldCliente.value = fields.Cliente || 'Nina';
     elements.fieldProduto.value = fields.Produto || 'ninachat';
-    elements.fieldPrioridade.value = fields.Prioridade || 'Baixa';
+    elements.fieldPrioridade.value = fields.Prioridade || 'Baixo';
     elements.fieldRepresentante.value = fields.Representante || 'Wander';
     elements.fieldNumeroChamado.value = fields.NumeroChamado || '-';
     syncFieldsFromInputs();
