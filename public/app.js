@@ -59,6 +59,8 @@
     inputGoogleApiKey: document.getElementById('inputGoogleApiKey'),
     btnToggleKeyVisibility: document.getElementById('btnToggleKeyVisibility'),
     selectGoogleModel: document.getElementById('selectGoogleModel'),
+    customModelContainer: document.getElementById('customModelContainer'),
+    inputCustomGoogleModel: document.getElementById('inputCustomGoogleModel'),
     googleAuthFeedback: document.getElementById('googleAuthFeedback'),
     btnTestAndSaveKey: document.getElementById('btnTestAndSaveKey'),
     btnTestSaveIcon: document.getElementById('btnTestSaveIcon'),
@@ -196,9 +198,17 @@
       if (!res.ok) return;
       const data = await res.json();
       state.hasGoogleKey = Boolean(data.hasGeminiKey);
-      state.googleModel = data.geminiModel || 'gemini-2.0-flash';
+      state.googleModel = data.geminiModel || 'gemini-3.8-flash';
       if (elements.selectGoogleModel) {
-        elements.selectGoogleModel.value = state.googleModel;
+        const standardModels = ['gemini-3.8-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+        if (standardModels.includes(state.googleModel)) {
+          elements.selectGoogleModel.value = state.googleModel;
+          if (elements.customModelContainer) elements.customModelContainer.classList.add('hidden');
+        } else {
+          elements.selectGoogleModel.value = 'custom';
+          if (elements.customModelContainer) elements.customModelContainer.classList.remove('hidden');
+          if (elements.inputCustomGoogleModel) elements.inputCustomGoogleModel.value = state.googleModel;
+        }
       }
 
       if (state.hasGoogleKey) {
@@ -268,7 +278,10 @@
 
   async function testAndSaveGoogleKey() {
     const key = elements.inputGoogleApiKey.value.trim();
-    const model = elements.selectGoogleModel.value;
+    let model = elements.selectGoogleModel.value;
+    if (model === 'custom') {
+      model = (elements.inputCustomGoogleModel && elements.inputCustomGoogleModel.value.trim()) || 'gemini-3.8-flash';
+    }
 
     if (!key && !state.hasGoogleKey) {
       elements.googleAuthFeedback.className = 'text-xs p-3 rounded-xl border bg-rose-500/10 border-rose-500/30 text-rose-300 block';
@@ -545,6 +558,16 @@
       const isPass = elements.inputGoogleApiKey.type === 'password';
       elements.inputGoogleApiKey.type = isPass ? 'text' : 'password';
       elements.btnToggleKeyVisibility.textContent = isPass ? '🔒' : '👁️';
+    });
+  }
+  if (elements.selectGoogleModel) {
+    elements.selectGoogleModel.addEventListener('change', () => {
+      if (elements.selectGoogleModel.value === 'custom') {
+        elements.customModelContainer.classList.remove('hidden');
+        elements.inputCustomGoogleModel.focus();
+      } else {
+        elements.customModelContainer.classList.add('hidden');
+      }
     });
   }
   if (elements.providerGeminiBtn) {

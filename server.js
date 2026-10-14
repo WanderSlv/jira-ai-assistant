@@ -42,14 +42,14 @@ app.get('/api/config', (req, res) => {
   res.json({
     hasGeminiKey: hasGemini,
     maskedKey: maskedKey,
-    geminiModel: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
+    geminiModel: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
     activeProvider: hasGemini ? 'gemini' : 'ollama'
   });
 });
 
 app.post('/api/test-google-key', async (req, res) => {
   try {
-    const { apiKey, model = 'gemini-2.0-flash' } = req.body || {};
+    const { apiKey, model = 'gemini-3.8-flash' } = req.body || {};
     const key = (apiKey && apiKey.trim()) || process.env.GEMINI_API_KEY;
     if (!key) {
       return res.status(400).json({ valid: false, error: 'Chave da API do Google não informada' });
@@ -128,7 +128,7 @@ app.post('/api/config', (req, res) => {
       success: true,
       hasGeminiKey: hasGemini,
       maskedKey: maskedKey,
-      geminiModel: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
+      geminiModel: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
       activeProvider: (providerPreference === 'ollama' || !hasGemini) ? 'ollama' : 'gemini'
     });
   } catch (err) {
@@ -227,7 +227,7 @@ async function callOllama(prompt) {
 }
 
 async function callGemini(apiKey, prompt, model) {
-  const chosenModel = model || process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+  const chosenModel = model || process.env.GEMINI_MODEL || 'gemini-3.8-flash';
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${chosenModel}:generateContent?key=${apiKey}`;
   const response = await fetch(url, {
     method: 'POST',
@@ -287,7 +287,7 @@ app.post('/api/enhance', async (req, res) => {
 
     const prompt = buildNinaPrompt(type, rawText, fields);
     const apiKey = (customApiKey && customApiKey.trim()) || process.env.GEMINI_API_KEY;
-    const model = (customModel && customModel.trim()) || process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+    const model = (customModel && customModel.trim()) || process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 
     // 1. Se houver chave Gemini e não for forçado apenas Ollama
     if (apiKey && providerPreference !== 'ollama') {
