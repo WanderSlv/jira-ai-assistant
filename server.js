@@ -1,6 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const { spawn } = require('child_process');
 require('dotenv').config();
 
 const app = express();
@@ -123,6 +124,29 @@ Não inclua nenhum texto explicativo fora do bloco JSON.`;
   } catch (err) {
     console.error('Erro no endpoint /api/enhance:', err);
     res.status(500).json({ error: 'Erro ao processar aprimoramento com IA' });
+  }
+});
+
+app.post('/api/open-jira', (req, res) => {
+  const { url } = req.body || {};
+  if (!url || typeof url !== 'string' || (!url.startsWith('http://') && !url.startsWith('https://'))) {
+    return res.status(400).json({ error: 'URL do Jira inválida' });
+  }
+
+  // Tenta abrir com google-chrome com DevTools ativo
+  try {
+    const child = spawn('google-chrome', ['--auto-open-devtools-for-tabs', url], {
+      detached: true,
+      stdio: 'ignore'
+    });
+    child.unref();
+    child.on('error', (err) => {
+      console.warn('google-chrome não pôde ser iniciado, tentando xdg-open:', err.message);
+      spawn('xdg-open', [url], { detached: true, stdio: 'ignore' }).unref();
+    });
+    return res.json({ success: true, message: 'Navegador iniciado com sucesso' });
+  } catch (err) {
+    return res.status(500).json({ error: 'Falha ao iniciar navegador: ' + err.message });
   }
 });
 
