@@ -86,3 +86,35 @@ test('POST /api/enhance fallback deve lidar com campos ausentes usando valores p
   assert.ok(data.descricao.includes('Adicionar exportação em CSV'));
   assert.ok(data.descricao.includes('Nina'));
 });
+
+test('GET e POST /api/config gerenciam modelo e chave do Gemini com segurança', async () => {
+  const resGet = await fetch(`${baseUrl}/api/config`);
+  assert.strictEqual(resGet.status, 200);
+  const dataGet = await resGet.json();
+  assert.ok('hasGeminiKey' in dataGet);
+
+  const resPost = await fetch(`${baseUrl}/api/config`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      geminiApiKey: 'AIzaSyFakeKeyForTest123456789',
+      geminiModel: 'gemini-2.0-flash'
+    })
+  });
+  assert.strictEqual(resPost.status, 200);
+  const dataPost = await resPost.json();
+  assert.strictEqual(dataPost.hasGeminiKey, true);
+  assert.strictEqual(dataPost.maskedKey.startsWith('AIzaSy'), true);
+  assert.strictEqual(dataPost.geminiModel, 'gemini-2.0-flash');
+});
+
+test('POST /api/test-google-key valida chave ausente com 400', async () => {
+  const response = await fetch(`${baseUrl}/api/test-google-key`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ apiKey: '' })
+  });
+  assert.strictEqual(response.status, 400);
+  const data = await response.json();
+  assert.strictEqual(data.valid, false);
+});

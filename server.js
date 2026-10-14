@@ -37,15 +37,58 @@ app.post('/api/presets', (req, res) => {
 });
 
 app.get('/api/config', (req, res) => {
+  const hasGemini = Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim());
+  const maskedKey = hasGemini ? (process.env.GEMINI_API_KEY.slice(0, 6) + '...' + process.env.GEMINI_API_KEY.slice(-4)) : '';
   res.json({
-    hasGeminiKey: Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim()),
-    provider: (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim()) ? 'gemini' : 'ollama'
+    hasGeminiKey: hasGemini,
+    maskedKey: maskedKey,
+    geminiModel: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
+    activeProvider: hasGemini ? 'gemini' : 'ollama'
   });
+});
+
+app.post('/api/test-google-key', async (req, res) => {
+  try {
+    const { apiKey, model = 'gemini-2.0-flash' } = req.body || {};
+    const key = (apiKey && apiKey.trim()) || process.env.GEMINI_API_KEY;
+    if (!key) {
+      return res.status(400).json({ valid: false, error: 'Chave da API do Google não informada' });
+    }
+
+    const testUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+    const testResp = await fetch(testUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: 'Responda apenas: OK' }] }]
+      }),
+      signal: AbortSignal.timeout(15000)
+    });
+
+    if (!testResp.ok) {
+      const errText = await testResp.text();
+      let msg = `Erro HTTP ${testResp.status}`;
+      try {
+        const errObj = JSON.parse(errText);
+        msg = errObj.error?.message || msg;
+      } catch (e) {}
+      return res.status(400).json({ valid: false, error: msg });
+    }
+
+    return res.json({
+      valid: true,
+      model,
+      message: `Chave autenticada com sucesso no modelo Google (${model})!`
+    });
+  } catch (err) {
+    return res.status(500).json({ valid: false, error: 'Falha de conexão com o Google: ' + err.message });
+  }
 });
 
 app.post('/api/config', (req, res) => {
   try {
-    const { geminiApiKey } = req.body || {};
+    const { geminiApiKey, geminiModel, providerPreference } = req.body || {};
+
     if (geminiApiKey !== undefined) {
       const keyVal = geminiApiKey.trim();
       process.env.GEMINI_API_KEY = keyVal;
@@ -61,11 +104,32 @@ app.post('/api/config', (req, res) => {
       } else {
         envContent = `PORT=3000\nGEMINI_API_KEY=${keyVal}\n`;
       }
+
+      if (geminiModel) {
+        process.env.GEMINI_MODEL = geminiModel.trim();
+        if (envContent.includes('GEMINI_MODEL=')) {
+          envContent = envContent.replace(/GEMINI_MODEL=.*/g, `GEMINI_MODEL=${geminiModel.trim()}`);
+        } else {
+          envContent += `\nGEMINI_MODEL=${geminiModel.trim()}`;
+        }
+      }
+
       fs.writeFileSync(ENV_FILE, envContent.trim() + '\n', 'utf8');
     }
+
+    if (geminiModel && !geminiApiKey) {
+      process.env.GEMINI_MODEL = geminiModel.trim();
+    }
+
+    const hasGemini = Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim());
+    const maskedKey = hasGemini ? (process.env.GEMINI_API_KEY.slice(0, 6) + '...' + process.env.GEMINI_API_KEY.slice(-4)) : '';
+
     res.json({
       success: true,
-      hasGeminiKey: Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim())
+      hasGeminiKey: hasGemini,
+      maskedKey: maskedKey,
+      geminiModel: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
+      activeProvider: (providerPreference === 'ollama' || !hasGemini) ? 'ollama' : 'gemini'
     });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao salvar configuração: ' + err.message });
@@ -162,8 +226,9 @@ async function callOllama(prompt) {
   };
 }
 
-async function callGemini(apiKey, prompt) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+async function callGemini(apiKey, prompt, model) {
+  const chosenModel = model || process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${chosenModel}:generateContent?key=${apiKey}`;
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -175,21 +240,35 @@ async function callGemini(apiKey, prompt) {
   });
 
   if (!response.ok) {
-    throw new Error(`Gemini retornou status ${response.status}`);
+    const errBody = await response.text();
+    throw new Error(`Google Gemini (${chosenModel}) retornou status ${response.status}: ${errBody}`);
   }
 
   const data = await response.json();
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  const parsed = JSON.parse(text);
+  if (!text) {
+    throw new Error('Google Gemini não retornou texto na resposta');
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (pe) {
+    const cleaned = text.replace(/```json/gi, '').replace(/```/gi, '').trim();
+    parsed = JSON.parse(cleaned);
+  }
+
   return {
     titulo: parsed.titulo || parsed.title,
-    descricao: formatDescricao(parsed.descricao || parsed.description)
+    descricao: formatDescricao(parsed.descricao || parsed.description),
+    provider: 'gemini',
+    model: chosenModel
   };
 }
 
 app.post('/api/enhance', async (req, res) => {
   try {
-    const { type, rawText, fields, customApiKey, providerPreference } = req.body || {};
+    const { type, rawText, fields, customApiKey, customModel, providerPreference } = req.body || {};
     if (!rawText || typeof rawText !== 'string' || !rawText.trim()) {
       return res.status(400).json({ error: 'rawText é obrigatório' });
     }
@@ -201,18 +280,20 @@ app.post('/api/enhance', async (req, res) => {
     if (process.env.NODE_ENV === 'test' && !process.env.GEMINI_API_KEY && !customApiKey) {
       return res.json({
         titulo: `[${prod}] - ${rawText.slice(0, 50).trim()}...`,
-        descricao: `Contexto:\n${rawText}\n\nProduto afetado: ${prod}\nCliente: ${cli}`
+        descricao: `Contexto:\n${rawText}\n\nProduto afetado: ${prod}\nCliente: ${cli}`,
+        provider: 'fallback'
       });
     }
 
     const prompt = buildNinaPrompt(type, rawText, fields);
     const apiKey = (customApiKey && customApiKey.trim()) || process.env.GEMINI_API_KEY;
+    const model = (customModel && customModel.trim()) || process.env.GEMINI_MODEL || 'gemini-2.0-flash';
 
     // 1. Se houver chave Gemini e não for forçado apenas Ollama
     if (apiKey && providerPreference !== 'ollama') {
       try {
-        console.log('🤖 Processando com Google Gemini...');
-        const result = await callGemini(apiKey, prompt);
+        console.log(`🤖 Processando com Google Gemini (${model})...`);
+        const result = await callGemini(apiKey, prompt, model);
         if (result.titulo && result.descricao) {
           return res.json(result);
         }
@@ -226,7 +307,11 @@ app.post('/api/enhance', async (req, res) => {
       console.log('🤖 Processando com Ollama local (qwen2.5-coder)...');
       const result = await callOllama(prompt);
       if (result.titulo && result.descricao) {
-        return res.json(result);
+        return res.json({
+          ...result,
+          provider: 'ollama',
+          model: 'qwen2.5-coder:latest'
+        });
       }
     } catch (ollamaErr) {
       console.warn('Ollama indisponível ou falhou:', ollamaErr.message);
@@ -236,7 +321,8 @@ app.post('/api/enhance', async (req, res) => {
     console.log('Utilizando gerador estruturado no padrão da Nina');
     return res.json({
       titulo: `[${prod}] - ${rawText.slice(0, 50).trim()}...`,
-      descricao: `📜 História & Contexto\nIdentificado durante a utilização do ${prod}.\n${rawText}\n\n🪲 Reprodução do bug\n1. Acessar o módulo ${prod}\n2. Executar a ação: ${rawText.slice(0, 80)}\n3. Observar a ocorrência do erro\n\n❌ Comportamento Atual\nO sistema apresentou falha durante a execução: "${rawText.slice(0, 120)}..."\n\n✅ Comportamento Esperado\nO sistema deve permitir a operação com sucesso sem apagar dados ou gerar erros inesperados.\n\n🧑‍💻 Análise Técnica\nProduto afetado: ${prod}\nCliente: ${cli}\nPrioridade: ${(fields && fields.Prioridade) || 'Baixo'}`
+      descricao: `📜 História & Contexto\nIdentificado durante a utilização do ${prod}.\n${rawText}\n\n🪲 Reprodução do bug\n1. Acessar o módulo ${prod}\n2. Executar a ação: ${rawText.slice(0, 80)}\n3. Observar a ocorrência do erro\n\n❌ Comportamento Atual\nO sistema apresentou falha durante a execução: "${rawText.slice(0, 120)}..."\n\n✅ Comportamento Esperado\nO sistema deve permitir a operação com sucesso sem apagar dados ou gerar erros inesperados.\n\n🧑‍💻 Análise Técnica\nProduto afetado: ${prod}\nCliente: ${cli}\nPrioridade: ${(fields && fields.Prioridade) || 'Baixo'}`,
+      provider: 'fallback'
     });
   } catch (err) {
     console.error('Erro no endpoint /api/enhance:', err);

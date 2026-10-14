@@ -14,7 +14,10 @@
     },
     title: '',
     description: '',
-    currentScript: ''
+    currentScript: '',
+    hasGoogleKey: false,
+    googleModel: 'gemini-2.0-flash',
+    providerPreference: 'gemini'
   };
 
   // Elementos do DOM
@@ -43,7 +46,29 @@
     codeOutput: document.getElementById('codeOutput'),
     toast: document.getElementById('toast'),
     toastIcon: document.getElementById('toastIcon'),
-    toastMsg: document.getElementById('toastMsg')
+    toastMsg: document.getElementById('toastMsg'),
+    // Elementos de Autenticação Google e Provedor IA
+    btnOpenGoogleModal: document.getElementById('btnOpenGoogleModal'),
+    googleAuthDot: document.getElementById('googleAuthDot'),
+    googleAuthText: document.getElementById('googleAuthText'),
+    googleModelBadge: document.getElementById('googleModelBadge'),
+    googleAuthModal: document.getElementById('googleAuthModal'),
+    googleAuthModalBox: document.getElementById('googleAuthModalBox'),
+    btnCloseGoogleModal: document.getElementById('btnCloseGoogleModal'),
+    btnCancelGoogleModal: document.getElementById('btnCancelGoogleModal'),
+    inputGoogleApiKey: document.getElementById('inputGoogleApiKey'),
+    btnToggleKeyVisibility: document.getElementById('btnToggleKeyVisibility'),
+    selectGoogleModel: document.getElementById('selectGoogleModel'),
+    googleAuthFeedback: document.getElementById('googleAuthFeedback'),
+    btnTestAndSaveKey: document.getElementById('btnTestAndSaveKey'),
+    btnTestSaveIcon: document.getElementById('btnTestSaveIcon'),
+    btnTestSaveText: document.getElementById('btnTestSaveText'),
+    btnDisconnectGoogleKey: document.getElementById('btnDisconnectGoogleKey'),
+    providerGeminiBtn: document.getElementById('providerGeminiBtn'),
+    providerOllamaBtn: document.getElementById('providerOllamaBtn'),
+    aiStatusBanner: document.getElementById('aiStatusBanner'),
+    aiStatusText: document.getElementById('aiStatusText'),
+    aiLatencyBadge: document.getElementById('aiLatencyBadge')
   };
 
   let toastTimeout = null;
@@ -164,6 +189,165 @@
     }
   }
 
+  // Funções de Autenticação e Configuração do Google Gemini
+  async function loadConfig() {
+    try {
+      const res = await fetch('/api/config');
+      if (!res.ok) return;
+      const data = await res.json();
+      state.hasGoogleKey = Boolean(data.hasGeminiKey);
+      state.googleModel = data.geminiModel || 'gemini-2.0-flash';
+      if (elements.selectGoogleModel) {
+        elements.selectGoogleModel.value = state.googleModel;
+      }
+
+      if (state.hasGoogleKey) {
+        state.providerPreference = 'gemini';
+        elements.googleAuthDot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse';
+        elements.googleAuthText.textContent = 'Google Gemini Ativo';
+        elements.googleModelBadge.textContent = state.googleModel;
+        elements.googleModelBadge.className = 'text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+        elements.btnOpenGoogleModal.className = 'flex items-center gap-2 px-3 py-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 hover:text-white text-xs font-semibold transition-all shadow-sm';
+        elements.btnDisconnectGoogleKey.classList.remove('hidden');
+        if (data.maskedKey) {
+          elements.inputGoogleApiKey.placeholder = `Chave configurada: ${data.maskedKey}`;
+        }
+      } else {
+        elements.googleAuthDot.className = 'w-2 h-2 rounded-full bg-slate-400';
+        elements.googleAuthText.textContent = 'Conectar Google AI';
+        elements.googleModelBadge.textContent = '⚡ ~1s';
+        elements.googleModelBadge.className = 'text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30';
+        elements.btnOpenGoogleModal.className = 'flex items-center gap-2 px-3 py-1.5 rounded-xl border border-indigo-500/40 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 hover:text-white text-xs font-semibold transition-all shadow-sm';
+        elements.btnDisconnectGoogleKey.classList.add('hidden');
+        state.providerPreference = 'ollama';
+      }
+      updateProviderButtons();
+    } catch (err) {
+      console.warn('Erro ao carregar config:', err);
+    }
+  }
+
+  function updateProviderButtons() {
+    if (state.providerPreference === 'gemini') {
+      elements.providerGeminiBtn.className = 'px-2.5 py-1 rounded-lg font-medium transition-all flex items-center gap-1.5 bg-indigo-600/40 text-indigo-200 border border-indigo-500/50 shadow-sm';
+      elements.providerOllamaBtn.className = 'px-2.5 py-1 rounded-lg font-medium transition-all flex items-center gap-1.5 text-slate-400 hover:text-slate-200';
+      elements.btnEnhanceText.textContent = state.hasGoogleKey ? 'Aprimorar com Google Gemini' : 'Conectar Google & Aprimorar';
+    } else {
+      elements.providerOllamaBtn.className = 'px-2.5 py-1 rounded-lg font-medium transition-all flex items-center gap-1.5 bg-amber-600/40 text-amber-200 border border-amber-500/50 shadow-sm';
+      elements.providerGeminiBtn.className = 'px-2.5 py-1 rounded-lg font-medium transition-all flex items-center gap-1.5 text-slate-400 hover:text-slate-200';
+      elements.btnEnhanceText.textContent = 'Aprimorar com Ollama';
+    }
+  }
+
+  function setProviderPreference(prov) {
+    if (prov === 'gemini' && !state.hasGoogleKey) {
+      openGoogleModal();
+      return;
+    }
+    state.providerPreference = prov;
+    updateProviderButtons();
+    showToast(`Motor de IA alterado para: ${prov === 'gemini' ? 'Google Gemini' : 'Ollama Local'}`, prov === 'gemini' ? '⚡' : '🦙');
+  }
+
+  function openGoogleModal() {
+    elements.googleAuthFeedback.className = 'hidden text-xs p-3 rounded-xl border';
+    elements.googleAuthFeedback.textContent = '';
+    elements.googleAuthModal.classList.remove('opacity-0', 'pointer-events-none');
+    elements.googleAuthModal.classList.add('opacity-100');
+    elements.googleAuthModalBox.classList.remove('scale-95');
+    elements.googleAuthModalBox.classList.add('scale-100');
+    elements.inputGoogleApiKey.focus();
+  }
+
+  function closeGoogleModal() {
+    elements.googleAuthModal.classList.add('opacity-0', 'pointer-events-none');
+    elements.googleAuthModal.classList.remove('opacity-100');
+    elements.googleAuthModalBox.classList.add('scale-95');
+    elements.googleAuthModalBox.classList.remove('scale-100');
+  }
+
+  async function testAndSaveGoogleKey() {
+    const key = elements.inputGoogleApiKey.value.trim();
+    const model = elements.selectGoogleModel.value;
+
+    if (!key && !state.hasGoogleKey) {
+      elements.googleAuthFeedback.className = 'text-xs p-3 rounded-xl border bg-rose-500/10 border-rose-500/30 text-rose-300 block';
+      elements.googleAuthFeedback.textContent = 'Por favor, insira uma chave de API válida do Google.';
+      return;
+    }
+
+    elements.btnTestAndSaveKey.disabled = true;
+    elements.btnTestSaveIcon.textContent = '⏳';
+    elements.btnTestSaveText.textContent = 'Testando conexão...';
+    elements.googleAuthFeedback.className = 'text-xs p-3 rounded-xl border bg-slate-800 border-slate-700 text-slate-300 block';
+    elements.googleAuthFeedback.textContent = `Validando chave com a API do Google (${model})...`;
+
+    try {
+      const testRes = await fetch('/api/test-google-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: key, model })
+      });
+
+      const testData = await testRes.json();
+      if (!testRes.ok || !testData.valid) {
+        throw new Error(testData.error || 'Chave rejeitada pela API do Google.');
+      }
+
+      // Se validada, salva a chave no backend
+      const saveRes = await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          geminiApiKey: key || undefined,
+          geminiModel: model,
+          providerPreference: 'gemini'
+        })
+      });
+
+      if (!saveRes.ok) throw new Error('Falha ao salvar configuração no servidor.');
+
+      elements.googleAuthFeedback.className = 'text-xs p-3 rounded-xl border bg-emerald-500/10 border-emerald-500/30 text-emerald-300 block';
+      elements.googleAuthFeedback.textContent = `✔ Conexão com Google Gemini (${model}) validada e salva com sucesso!`;
+
+      await loadConfig();
+      state.providerPreference = 'gemini';
+      updateProviderButtons();
+
+      setTimeout(() => {
+        closeGoogleModal();
+        showToast('Google Gemini conectado com sucesso! Respostas em ~1s ativadas.', '⚡');
+      }, 1200);
+    } catch (err) {
+      elements.googleAuthFeedback.className = 'text-xs p-3 rounded-xl border bg-rose-500/10 border-rose-500/30 text-rose-300 block';
+      elements.googleAuthFeedback.textContent = `❌ ${err.message}`;
+    } finally {
+      elements.btnTestAndSaveKey.disabled = false;
+      elements.btnTestSaveIcon.textContent = '⚡';
+      elements.btnTestSaveText.textContent = 'Testar & Salvar';
+    }
+  }
+
+  async function disconnectGoogleKey() {
+    if (!confirm('Deseja realmente desconectar sua chave Google e voltar ao Ollama local?')) return;
+    try {
+      await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ geminiApiKey: '', providerPreference: 'ollama' })
+      });
+      elements.inputGoogleApiKey.value = '';
+      elements.inputGoogleApiKey.placeholder = 'Cole sua chave AIzaSy...';
+      await loadConfig();
+      state.providerPreference = 'ollama';
+      updateProviderButtons();
+      closeGoogleModal();
+      showToast('Chave Google desconectada. Ollama local ativo.', '🦙');
+    } catch (err) {
+      showToast('Erro ao desconectar chave', '❌');
+    }
+  }
+
   async function handleEnhanceWithAI() {
     const raw = elements.rawText.value.trim();
     if (!raw) {
@@ -172,12 +356,21 @@
       return;
     }
 
+    if (state.providerPreference === 'gemini' && !state.hasGoogleKey) {
+      openGoogleModal();
+      return;
+    }
+
     syncFieldsFromInputs();
 
     // Estado visual de carregamento
+    const isGemini = state.providerPreference === 'gemini';
     elements.btnEnhance.disabled = true;
     elements.btnEnhanceIcon.textContent = '⏳';
-    elements.btnEnhanceText.textContent = 'Aprimorando com IA...';
+    elements.btnEnhanceText.textContent = isGemini ? 'Processando com Google AI...' : 'Processando com Ollama...';
+    elements.aiStatusBanner.classList.add('hidden');
+
+    const startTime = Date.now();
 
     try {
       const res = await fetch('/api/enhance', {
@@ -186,12 +379,15 @@
         body: JSON.stringify({
           type: state.activePreset,
           rawText: raw,
-          fields: state.currentFields
+          fields: state.currentFields,
+          providerPreference: state.providerPreference,
+          customModel: state.googleModel
         })
       });
 
       if (!res.ok) throw new Error('Falha no aprimoramento');
       const data = await res.json();
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 
       if (data.titulo) {
         elements.ticketTitle.value = data.titulo;
@@ -201,11 +397,25 @@
       }
 
       updateScriptPreview();
-      showToast('Conteúdo aprimorado com sucesso!', '✨');
+
+      // Exibe banner de status da geração
+      elements.aiStatusBanner.classList.remove('hidden');
+      if (data.provider === 'gemini') {
+        elements.aiStatusText.textContent = `⚡ Aprimorado com Google Gemini (${data.model || state.googleModel})`;
+        elements.aiLatencyBadge.textContent = `${elapsed}s`;
+        showToast(`Card gerado com sucesso via Google Gemini em ${elapsed}s!`, '⚡');
+      } else if (data.provider === 'ollama') {
+        elements.aiStatusText.textContent = `🦙 Aprimorado com Ollama Local (qwen2.5-coder)`;
+        elements.aiLatencyBadge.textContent = `${elapsed}s`;
+        showToast(`Card gerado com sucesso via Ollama local em ${elapsed}s!`, '🦙');
+      } else {
+        elements.aiStatusText.textContent = `📋 Estruturado no Padrão Oficial da Nina`;
+        elements.aiLatencyBadge.textContent = `${elapsed}s`;
+        showToast('Card estruturado no padrão da Nina!', '✨');
+      }
     } catch (err) {
       console.error('Erro no aprimoramento:', err);
       showToast('Erro ao chamar IA, usando fallback local', '⚠️');
-      // Fallback amigável direto
       if (!elements.ticketTitle.value) {
         elements.ticketTitle.value = `[${state.currentFields.Produto}] - ${raw.slice(0, 50)}...`;
       }
@@ -216,7 +426,7 @@
     } finally {
       elements.btnEnhance.disabled = false;
       elements.btnEnhanceIcon.textContent = '✨';
-      elements.btnEnhanceText.textContent = 'Aprimorar com IA';
+      updateProviderButtons();
     }
   }
 
@@ -314,6 +524,46 @@
   elements.btnBigCopy.addEventListener('click', copyScriptToClipboard);
   elements.btnSmallCopy.addEventListener('click', copyScriptToClipboard);
 
+  // Listeners de Autenticação Google e Provedores
+  if (elements.btnOpenGoogleModal) {
+    elements.btnOpenGoogleModal.addEventListener('click', openGoogleModal);
+  }
+  if (elements.btnCloseGoogleModal) {
+    elements.btnCloseGoogleModal.addEventListener('click', closeGoogleModal);
+  }
+  if (elements.btnCancelGoogleModal) {
+    elements.btnCancelGoogleModal.addEventListener('click', closeGoogleModal);
+  }
+  if (elements.btnTestAndSaveKey) {
+    elements.btnTestAndSaveKey.addEventListener('click', testAndSaveGoogleKey);
+  }
+  if (elements.btnDisconnectGoogleKey) {
+    elements.btnDisconnectGoogleKey.addEventListener('click', disconnectGoogleKey);
+  }
+  if (elements.btnToggleKeyVisibility) {
+    elements.btnToggleKeyVisibility.addEventListener('click', () => {
+      const isPass = elements.inputGoogleApiKey.type === 'password';
+      elements.inputGoogleApiKey.type = isPass ? 'text' : 'password';
+      elements.btnToggleKeyVisibility.textContent = isPass ? '🔒' : '👁️';
+    });
+  }
+  if (elements.providerGeminiBtn) {
+    elements.providerGeminiBtn.addEventListener('click', () => setProviderPreference('gemini'));
+  }
+  if (elements.providerOllamaBtn) {
+    elements.providerOllamaBtn.addEventListener('click', () => setProviderPreference('ollama'));
+  }
+
+  // Fechar modal ao clicar fora da caixa
+  if (elements.googleAuthModal) {
+    elements.googleAuthModal.addEventListener('click', (e) => {
+      if (e.target === elements.googleAuthModal) {
+        closeGoogleModal();
+      }
+    });
+  }
+
   // Inicialização
   loadPresets();
+  loadConfig();
 })();
