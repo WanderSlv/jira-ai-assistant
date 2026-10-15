@@ -324,24 +324,64 @@ function generateJiraScript(options = {}) {
     }
   }
 
-  function acharLabel(texto) {
-    var elementos = Array.from(document.querySelectorAll("label, div, span, p"));
-    var t = texto.toLowerCase();
-    return elementos.find(function(el) {
-      var inner = (el.innerText || "").trim().toLowerCase();
-      return inner === t ||
-             inner === t + "*" ||
-             (inner.startsWith(t) && inner.length <= t.length + 3);
-    });
+  function normalizar(s) {
+    if (!s) return "";
+    return s.toString()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[\\s_.,-]+/g, "");
+  }
+
+  function acharLabel(textoOuLista) {
+    var alvos = (Array.isArray(textoOuLista) ? textoOuLista : [textoOuLista])
+      .map(normalizar)
+      .filter(Boolean);
+    var elementos = Array.from(document.querySelectorAll("label, div, span, p, strong, b"));
+
+    for (var i = 0; i < alvos.length; i++) {
+      var t = alvos[i];
+      var achado = elementos.find(function(el) {
+        var raw = (el.innerText || el.textContent || "").trim();
+        if (raw.length > 80) return false;
+        var norm = normalizar(raw);
+        return norm === t || norm === t + "*" || norm.replace(/\\*+$/, "") === t;
+      });
+      if (achado) return achado;
+    }
+
+    for (var j = 0; j < alvos.length; j++) {
+      var termo = alvos[j];
+      if (termo.length < 3) continue;
+      var matchInclusao = elementos.find(function(el) {
+        var raw = (el.innerText || el.textContent || "").trim();
+        if (raw.length > 80) return false;
+        var norm = normalizar(raw).replace(/\\*+$/, "");
+        return norm === termo || norm.includes(termo) || termo.includes(norm);
+      });
+      if (matchInclusao) return matchInclusao;
+    }
+
+    return null;
   }
 
   function acharContainer(lbl) {
-    var c = lbl ? lbl.parentElement : null;
-    for (var i = 0; i < 5 && c; i++) {
-      if (c.querySelector("input, textarea, [contenteditable='true']")) return c;
+    if (!lbl) return null;
+    var forAttr = lbl.getAttribute && (lbl.getAttribute("for") || lbl.getAttribute("htmlfor"));
+    if (forAttr) {
+      var targetEl = document.getElementById(forAttr);
+      if (targetEl) return targetEl.closest("div[class*='field'], div[class*='form-group'], div") || targetEl.parentElement;
+    }
+    var c = lbl.parentElement;
+    for (var i = 0; i < 7 && c; i++) {
+      if (c.querySelector("input:not([type='hidden']), textarea, [contenteditable='true'], [role='combobox'], [class*='control'], [class*='select']")) return c;
       c = c.parentElement;
     }
-    return lbl ? lbl.parentElement : null;
+    if (lbl.parentElement && lbl.parentElement.nextElementSibling) {
+      var sibling = lbl.parentElement.nextElementSibling;
+      if (sibling.querySelector("input:not([type='hidden']), textarea, [role='combobox'], [class*='control']")) return sibling;
+    }
+    return lbl.parentElement;
   }
 
   // 1. Campos de texto padrão (Título e Número do chamado)
@@ -361,7 +401,8 @@ function generateJiraScript(options = {}) {
         else input.value = valor;
         input.dispatchEvent(new Event("input", { bubbles: true }));
         input.dispatchEvent(new Event("change", { bubbles: true }));
-        console.log("✔ Campo texto preenchido: " + chave);
+        var nomeChave = Array.isArray(chave) ? chave[0] : chave;
+        console.log("✔ Campo texto preenchido: " + nomeChave);
       }
     } catch (e) {
       console.warn("Erro ao preencher " + chave, e);
@@ -374,7 +415,7 @@ function generateJiraScript(options = {}) {
   function preencherDescricao(valor) {
     try {
       var html = markdownToHtml(valor);
-      var lbl = acharLabel("Descrição");
+      var lbl = acharLabel(["Descrição", "Description"]);
       var container = acharContainer(lbl);
       var editor = container ?
         container.querySelector("[contenteditable='true']") : null;
@@ -405,9 +446,15 @@ function generateJiraScript(options = {}) {
     try {
       var lbl = acharLabel(chave);
       var container = acharContainer(lbl);
-      var input = container ? container.querySelector("input") : null;
+      var input = container ? container.querySelector("input:not([type='hidden'])") : null;
       var trigger = container ?
-        container.querySelector("[role='combobox'], button, [class*='control']") : null;
+        container.querySelector("[role='combobox'], button, [class*='control'], [class*='select__control']") : null;
+
+      // Se for input de texto simples sem combobox
+      if (!trigger && input && !container.querySelector("[role='combobox'], [class*='control'], [class*='select']")) {
+        preencherInput(chave, termoBusca);
+        return;
+      }
 
       if (trigger) simularCliqueReal(trigger);
       else if (input) simularCliqueReal(input);
@@ -454,7 +501,8 @@ function generateJiraScript(options = {}) {
           await wait(50);
           simularCliqueReal(opcaoEncontrada);
           if (optContainer !== opcaoEncontrada) simularCliqueReal(optContainer);
-          console.log("✔ Fixado: " + chave + " -> " + opcaoEncontrada.innerText.trim());
+          var nomeExib = Array.isArray(chave) ? chave[0] : chave;
+          console.log("✔ Fixado: " + nomeExib + " -> " + opcaoEncontrada.innerText.trim());
         }
 
         // Teclado Enter como confirmação
@@ -474,17 +522,17 @@ function generateJiraScript(options = {}) {
   var textoDescricao = pedacosDescricao.join("");
 
   // Preenchimento de campos de texto
-  preencherInput("Título", ${jsonTitulo});
+  preencherInput(["Título", "Summary", "Assunto"], ${jsonTitulo});
   preencherDescricao(textoDescricao);
-  preencherInput("Número do chamado", ${jsonNumero});
+  preencherInput(["Número do chamado", "Numero chamado", "Chamado"], ${jsonNumero});
 
   await wait(300);
 
   // Fixação de seletores React (Produto, Prioridade, Cliente, Representante)
-  await fixarSeletor("Produto", ${jsonProduto});
-  await fixarSeletor("Prioridade", ${jsonPrioridade});
-  await fixarSeletor("Cliente", ${jsonCliente});
-  await fixarSeletor("Representante", ${jsonRepresentante});
+  await fixarSeletor(["Produto", "Product", "Módulo"], ${jsonProduto});
+  await fixarSeletor(["Prioridade", "Priority"], ${jsonPrioridade});
+  await fixarSeletor(["Cliente", "Client", "Empresa"], ${jsonCliente});
+  await fixarSeletor(["Representante do Cliente", "Representante do cliente", "Representante", "Representative"], ${jsonRepresentante});
 
   console.log("=== PREENCHIMENTO CONCLUÍDO (Pronto para revisão - NUNCA clica em Enviar) ===");
 })();`;

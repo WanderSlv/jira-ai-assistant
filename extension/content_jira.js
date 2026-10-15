@@ -90,33 +90,81 @@
     }
   }
 
-  function findLabel(text) {
-    const elements = Array.from(document.querySelectorAll('label, div, span, p'));
-    const t = text.toLowerCase();
-    return elements.find(el => {
-      const inner = (el.innerText || el.textContent || '').trim().toLowerCase();
-      return inner === t ||
-             inner === t + '*' ||
-             (inner.startsWith(t) && inner.length <= t.length + 3);
-    });
+  function findLabel(textOrList) {
+    const targets = (Array.isArray(textOrList) ? textOrList : [textOrList])
+      .map(s => normalizeStr(s))
+      .filter(Boolean);
+
+    const elements = Array.from(document.querySelectorAll('label, div, span, p, h1, h2, h3, h4, strong, b'));
+
+    // 1. Prioridade absoluta para match exato (com ou sem asterisco)
+    for (const t of targets) {
+      const found = elements.find(el => {
+        const raw = (el.innerText || el.textContent || '').trim();
+        if (raw.length > 80) return false;
+        const norm = normalizeStr(raw);
+        if (!norm) return false;
+        return norm === t ||
+               norm === t + '*' ||
+               norm.replace(/\*+$/, '') === t;
+      });
+      if (found) return found;
+    }
+
+    // 2. Match por inclusão do rótulo (ex: "representantedocliente" contém "representante")
+    for (const t of targets) {
+      if (t.length < 3) continue;
+      const found = elements.find(el => {
+        const raw = (el.innerText || el.textContent || '').trim();
+        if (raw.length > 80) return false;
+        const norm = normalizeStr(raw);
+        if (!norm) return false;
+        const clean = norm.replace(/\*+$/, '');
+        return clean === t || clean.includes(t) || t.includes(clean);
+      });
+      if (found) return found;
+    }
+
+    return null;
   }
 
   function findContainer(lbl) {
-    let c = lbl ? lbl.parentElement : null;
-    for (let i = 0; i < 6 && c; i++) {
-      if (c.querySelector("input, textarea, [contenteditable='true'], [role='combobox'], [class*='control']")) {
+    if (!lbl) return null;
+
+    // Se o elemento possui o atributo 'for', procura o input associado diretamente pelo ID
+    const forAttr = lbl.getAttribute && (lbl.getAttribute('for') || lbl.getAttribute('htmlfor'));
+    if (forAttr) {
+      const targetEl = document.getElementById(forAttr);
+      if (targetEl) {
+        return targetEl.closest("div[class*='field'], div[class*='form-group'], div") || targetEl.parentElement;
+      }
+    }
+
+    // Busca subindo na árvore hierárquica pelo container de formulário
+    let c = lbl.parentElement;
+    for (let i = 0; i < 7 && c; i++) {
+      if (c.querySelector("input:not([type='hidden']), textarea, [contenteditable='true'], [role='combobox'], [class*='control'], [class*='select']")) {
         return c;
       }
       c = c.parentElement;
     }
-    return lbl ? lbl.parentElement : null;
+
+    // Se o input estiver num elemento irmão (ex: label em uma coluna, controle na coluna ao lado)
+    if (lbl.parentElement && lbl.parentElement.nextElementSibling) {
+      const sibling = lbl.parentElement.nextElementSibling;
+      if (sibling.querySelector("input:not([type='hidden']), textarea, [role='combobox'], [class*='control']")) {
+        return sibling;
+      }
+    }
+
+    return lbl.parentElement;
   }
 
   // 1. Preenchimento de campos de texto (Título, Número do chamado)
-  function fillTextInput(labelName, value) {
+  function fillTextInput(labelNames, value) {
     if (!value || value === '-') return false;
     try {
-      const lbl = findLabel(labelName);
+      const lbl = findLabel(labelNames);
       const container = findContainer(lbl);
       const sel = "input:not([type='hidden']):not([type='file']), textarea";
       const input = container ? container.querySelector(sel) : null;
@@ -133,11 +181,12 @@
         }
         input.dispatchEvent(new Event('input', { bubbles: true }));
         input.dispatchEvent(new Event('change', { bubbles: true }));
-        console.log('✔ [Jira Assistant] Campo texto preenchido:', labelName, '=>', value);
+        const labelDisplay = Array.isArray(labelNames) ? labelNames[0] : labelNames;
+        console.log('✔ [Jira Assistant] Campo texto preenchido:', labelDisplay, '=>', value);
         return true;
       }
     } catch (e) {
-      console.warn('Erro ao preencher texto:', labelName, e);
+      console.warn('Erro ao preencher texto:', labelNames, e);
     }
     return false;
   }
@@ -297,15 +346,29 @@
   }
 
   // 3. Fixação e clique real em seletores React (Produto, Prioridade, Cliente, Representante)
-  async function selectReactOption(labelName, targetValue) {
+  async function selectReactOption(labelNames, targetValue) {
     if (!targetValue || targetValue === '-') return false;
     try {
-      const lbl = findLabel(labelName);
+      const lbl = findLabel(labelNames);
       const container = findContainer(lbl);
       if (!container) return false;
 
       const trigger = container.querySelector("[role='combobox'], [class*='control'], [class*='select__control'], button");
       const input = container.querySelector("input:not([type='hidden'])");
+
+      // Se o container não possui dropdown/combobox, é um campo de texto convencional
+      if (!trigger && input && !container.querySelector("[role='combobox'], [class*='control'], [class*='select']")) {
+        input.focus();
+        const proto = input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+        const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+        if (setter) setter.call(input, targetValue);
+        else input.value = targetValue;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        const displayLbl = Array.isArray(labelNames) ? labelNames[0] : labelNames;
+        console.log('✔ [Jira Assistant] Campo texto direto preenchido:', displayLbl, '=>', targetValue);
+        return true;
+      }
 
       // 1. Abre o dropdown clicando no trigger ou focando o input
       if (trigger) {
@@ -348,7 +411,8 @@
           dispatchMouseSequence(optionContainer);
         }
 
-        console.log('✔ [Jira Assistant] Opção clicada com sucesso:', labelName, '=>', matchingOption.innerText?.trim());
+        const displayLbl = Array.isArray(labelNames) ? labelNames[0] : labelNames;
+        console.log('✔ [Jira Assistant] Opção clicada com sucesso:', displayLbl, '=>', matchingOption.innerText?.trim());
       }
 
       // 4. Teclado como garantia e confirmação (Enter e Tab no input)
@@ -358,10 +422,11 @@
       }
 
       // 5. Notifica o script MAIN inpage_fiber para invocar SyntheticEvents do React
+      const primaryLabel = Array.isArray(labelNames) ? labelNames[0] : labelNames;
       window.postMessage({
         source: 'JIRA_ASSISTANT_CONTENT',
         action: 'SELECT_REACT_OPTION',
-        targetLabel: labelName,
+        targetLabel: primaryLabel,
         searchValue: targetValue
       }, '*');
 
@@ -380,7 +445,7 @@
       await wait(250);
       return true;
     } catch (e) {
-      console.warn('Erro ao selecionar opção React:', labelName, e);
+      console.warn('Erro ao selecionar opção React:', labelNames, e);
       return false;
     }
   }
@@ -404,22 +469,33 @@
     const numeroChamado = fields.NumeroChamado || '-';
 
     // 1. Textos
-    fillTextInput('Título', titulo);
-    fillTextInput('Summary', titulo);
+    fillTextInput(['Título', 'Summary', 'Titulo', 'Assunto'], titulo);
     fillDescription(descricao);
     if (numeroChamado && numeroChamado !== '-') {
-      fillTextInput('Número do chamado', numeroChamado);
-      fillTextInput('Numero chamado', numeroChamado);
-      fillTextInput('Chamado', numeroChamado);
+      fillTextInput(['Número do chamado', 'Numero chamado', 'Chamado', 'Ticket', 'Protocolo'], numeroChamado);
     }
 
     await wait(300);
 
-    // 2. Seletores React com cliques reais
-    await selectReactOption('Produto', produto);
-    await selectReactOption('Prioridade', prioridade);
-    await selectReactOption('Cliente', cliente);
-    await selectReactOption('Representante', representante);
+    // 2. Seletores React / Dropdowns com cliques reais e aliases
+    await selectReactOption(['Produto', 'Product', 'Sistema', 'Módulo'], produto);
+    await selectReactOption(['Prioridade', 'Priority', 'Urgência'], prioridade);
+    await selectReactOption(['Cliente', 'Client', 'Empresa', 'Conta'], cliente);
+
+    // Representante do Cliente (suporte explícito a "Representante do Cliente*")
+    const reprAliases = [
+      'Representante do Cliente',
+      'Representante do cliente',
+      'Representante do Cliente*',
+      'Representante Cliente',
+      'Representante',
+      'Representative',
+      'Responsável pelo Cliente'
+    ];
+    const reprOk = await selectReactOption(reprAliases, representante);
+    if (!reprOk) {
+      fillTextInput(reprAliases, representante);
+    }
 
     showFloatingToast('✔ Chamado preenchido com sucesso! Pronto para revisão.', '🎉');
   }
