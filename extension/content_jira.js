@@ -424,6 +424,9 @@
     showFloatingToast('✔ Chamado preenchido com sucesso! Pronto para revisão.', '🎉');
   }
 
+  // Exponibiliza no escopo global para invocação direta do popup via executeScript
+  window.__JIRA_ASSISTANT_FILL__ = executeFormFill;
+
   // Toast flutuante visual na tela do Jira
   function showFloatingToast(msg, icon = '⚡') {
     let toast = document.getElementById('jira-ai-toast');

@@ -34,75 +34,104 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  function isJiraUrl(url) {
+    if (!url) return false;
+    const u = url.toLowerCase();
+    return u.includes('atlassian.net') ||
+           u.includes('jira.com') ||
+           u.includes('atlassian.com') ||
+           u.includes('/jira') ||
+           u.includes('/servicedesk');
+  }
+
   btnFill.addEventListener('click', async () => {
     if (!activeTicket) return;
 
     btnFill.disabled = true;
-    btnFill.innerHTML = '<span>⏳</span><span>Preenchendo campos...</span>';
+    btnFill.innerHTML = '<span>⏳</span><span>Localizando chamado no Jira...</span>';
 
     try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!tab || !tab.id) {
-        throw new Error('Nenhuma aba ativa identificada.');
+      const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      let targetTab = currentTab;
+
+      // Se a aba atual não for do Jira, busca se há alguma aba do Jira aberta no navegador
+      if (!isJiraUrl(currentTab?.url)) {
+        const allTabs = await chrome.tabs.query({});
+        const jiraTab = allTabs.find(t => isJiraUrl(t.url));
+
+        if (jiraTab && jiraTab.id) {
+          targetTab = jiraTab;
+          // Alterna para a aba do Jira automaticamente
+          await chrome.tabs.update(jiraTab.id, { active: true });
+          if (jiraTab.windowId) {
+            await chrome.windows.update(jiraTab.windowId, { focused: true });
+          }
+        } else {
+          throw new Error('NOT_JIRA_TAB');
+        }
       }
 
-      if (tab.url && (tab.url.startsWith('chrome://') || tab.url.startsWith('edge://') || tab.url.startsWith('about:'))) {
-        throw new Error('RESTRICTED_URL');
-      }
+      btnFill.innerHTML = '<span>⚡</span><span>Preenchendo campos...</span>';
 
-      const sendFillMessage = () => {
-        return new Promise((resolve, reject) => {
-          chrome.tabs.sendMessage(tab.id, {
-            action: 'FILL_FORM',
-            ticketData: activeTicket
-          }, (response) => {
-            if (chrome.runtime.lastError) {
-              reject(new Error(chrome.runtime.lastError.message));
-            } else {
-              resolve(response);
-            }
-          });
-        });
-      };
-
+      // 1. Injeta o content_jira.js dinamicamente (garante que está presente sem precisar de F5)
       try {
-        await sendFillMessage();
-      } catch (connErr) {
-        console.log('Script não detectado na aba. Injetando dinamicamente via scripting API...', connErr);
-
-        // Injeta automaticamente content_jira.js caso a aba estivesse aberta antes da extensão
         await chrome.scripting.executeScript({
-          target: { tabId: tab.id, allFrames: true },
+          target: { tabId: targetTab.id, allFrames: true },
           files: ['content_jira.js']
         });
+      } catch (e) {
+        // Fallback para frame principal se houver iframe restrito
+        await chrome.scripting.executeScript({
+          target: { tabId: targetTab.id },
+          files: ['content_jira.js']
+        });
+      }
 
-        // Tenta também injetar inpage_fiber.js no world MAIN
-        try {
-          await chrome.scripting.executeScript({
-            target: { tabId: tab.id, allFrames: true },
-            files: ['inpage_fiber.js'],
-            world: 'MAIN'
-          });
-        } catch (e) {
-          // Ignora se o host não permitir main world injection
-        }
+      // 2. Injeta também inpage_fiber.js no world MAIN se possível
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: targetTab.id, allFrames: true },
+          files: ['inpage_fiber.js'],
+          world: 'MAIN'
+        });
+      } catch (e) {
+        // Ignora se o host não permitir main world via scripting
+      }
 
-        // Aguarda registro dos listeners
-        await new Promise(r => setTimeout(r, 200));
-
-        // Reenvia a mensagem
-        await sendFillMessage();
+      // 3. Executa a função de preenchimento diretamente no contexto da aba do Jira
+      // Isso elimina 100% qualquer erro de "Could not establish connection / Receiving end does not exist"
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: targetTab.id, allFrames: true },
+          func: async (ticket) => {
+            if (typeof window.__JIRA_ASSISTANT_FILL__ === 'function') {
+              await window.__JIRA_ASSISTANT_FILL__(ticket);
+            }
+          },
+          args: [activeTicket]
+        });
+      } catch (e) {
+        await chrome.scripting.executeScript({
+          target: { tabId: targetTab.id },
+          func: async (ticket) => {
+            if (typeof window.__JIRA_ASSISTANT_FILL__ === 'function') {
+              await window.__JIRA_ASSISTANT_FILL__(ticket);
+            }
+          },
+          args: [activeTicket]
+        });
       }
 
       btnFill.innerHTML = '<span>✔</span><span>Preenchimento Concluído!</span>';
       setTimeout(() => {
         window.close();
-      }, 1200);
+      }, 1500);
+
     } catch (err) {
       console.warn('Erro ao preencher:', err);
       let msg = 'Recarregue a aba do Jira (F5)';
-      if (err.message === 'RESTRICTED_URL') {
-        msg = 'Vá para a aba do Jira primeiro';
+      if (err.message === 'NOT_JIRA_TAB') {
+        msg = 'Abra uma aba do Jira primeiro';
       }
       btnFill.innerHTML = `<span>⚠️</span><span>${msg}</span>`;
       setTimeout(() => {
