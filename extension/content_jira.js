@@ -523,11 +523,17 @@
 
   // Monitora requisições vindas do popup da extensão
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.action === 'FILL_FORM') {
-      executeFormFill(request.ticketData);
-      sendResponse({ success: true });
+    if (request && request.action === 'FILL_FORM') {
+      executeFormFill(request.ticketData)
+        .then(() => {
+          sendResponse({ success: true });
+        })
+        .catch(err => {
+          console.warn('Erro ao executar preenchimento:', err);
+          sendResponse({ success: false, error: err?.message });
+        });
+      return true; // Mantém o canal aberto para resposta assíncrona
     }
-    return true;
   });
 
   // Tenta injetar o botão flutuante quando o DOM estiver pronto
