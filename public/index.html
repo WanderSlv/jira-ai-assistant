@@ -49,6 +49,12 @@
 
       <!-- Controles de Cabeçalho: Tipo e Conexão com Google AI -->
       <div class="flex items-center flex-wrap gap-2.5">
+        <!-- Status da Extensão Chrome -->
+        <div id="extensionStatusBadge" class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-xs font-medium">
+          <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+          <span id="extensionStatusText">Extensão Chrome Disponível</span>
+        </div>
+
         <!-- Botão de Autenticação / Status do Google AI -->
         <button type="button" id="btnOpenGoogleModal" class="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-indigo-500/40 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 hover:text-white text-xs font-semibold transition-all shadow-sm">
           <span id="googleAuthDot" class="w-2 h-2 rounded-full bg-slate-400"></span>
@@ -112,7 +118,7 @@
         </div>
         <div>
           <label class="block text-xs font-semibold text-slate-400 mb-1">Representante</label>
-          <input type="text" id="fieldRepresentante" value="Wander" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500">
+          <input type="text" id="fieldRepresentante" value="Wander" readonly title="O representante é fixo em Wander" class="w-full bg-slate-950/60 border border-slate-700/60 rounded-lg px-3 py-1.5 text-xs text-slate-300 cursor-not-allowed focus:outline-none">
         </div>
         <div>
           <label class="block text-xs font-semibold text-slate-400 mb-1">Número do Chamado</label>
@@ -144,6 +150,40 @@
           </div>
 
           <textarea id="rawText" rows="4" placeholder="Ex: O bloco de agendar tarefa está dando erro quando a flag de integração não está ativa, mas ele deveria funcionar sem ela..." class="w-full bg-slate-950 border border-slate-700/80 rounded-xl p-3 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors leading-relaxed"></textarea>
+
+          <!-- Badges de campos detectados na explicação bruta -->
+          <div id="detectedFieldsBadge" class="hidden text-xs py-2 px-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 flex flex-wrap items-center justify-between gap-2">
+            <span class="flex items-center gap-1.5 font-medium">
+              <span>🎯</span>
+              <span id="detectedFieldsText">Campos identificados automaticamente</span>
+            </span>
+            <span class="text-[11px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-500/30">Atualizado nos campos pré-fixados</span>
+          </div>
+
+          <!-- Área de Prints e Evidências (Imagens) -->
+          <div class="space-y-2 pt-1 border-t border-slate-800/60">
+            <div class="flex items-center justify-between">
+              <label class="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                <span>📸</span>
+                <span>Prints & Evidências</span>
+                <span id="evidenceCountBadge" class="hidden text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">0</span>
+              </label>
+              <label for="evidenceFileInput" class="text-xs text-emerald-400 hover:text-emerald-300 cursor-pointer flex items-center gap-1 transition-colors select-none">
+                <span>➕ Anexar print</span>
+              </label>
+              <input type="file" id="evidenceFileInput" accept="image/*" multiple class="hidden">
+            </div>
+
+            <!-- Dropzone e Lista de Miniaturas -->
+            <div id="evidenceDropzone" class="border border-dashed border-slate-700/80 hover:border-emerald-500/60 rounded-xl p-3 bg-slate-950/40 transition-all cursor-pointer">
+              <div id="evidenceEmptyNotice" class="text-center py-2 text-xs text-slate-400 flex flex-col items-center gap-1">
+                <span class="text-base">📸</span>
+                <span>Cole prints com <kbd class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-200 border border-slate-700 text-[11px] font-mono">Ctrl+V</kbd> ou clique para selecionar</span>
+                <span class="text-[10px] text-slate-500">A IA multimodal analisa visualmente o print para detalhar o chamado</span>
+              </div>
+              <div id="evidenceThumbnails" class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 hidden"></div>
+            </div>
+          </div>
 
           <!-- Seletor de Motor de IA e Ações -->
           <div class="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-800/80">
@@ -195,10 +235,93 @@
 
           <!-- Descrição Estruturada -->
           <div class="space-y-1.5">
-            <label class="block text-xs font-semibold text-slate-300">
-              Descrição Estruturada
-            </label>
-            <textarea id="ticketDescription" rows="8" placeholder="Contexto:&#10;...&#10;&#10;Passos para reprodução:&#10;1. ...&#10;&#10;Comportamento Esperado vs Obtido:&#10;..." class="w-full bg-slate-950 border border-slate-700/80 rounded-xl p-3 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors leading-relaxed font-mono text-xs"></textarea>
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <label class="block text-xs font-semibold text-slate-300">
+                Descrição Estruturada
+              </label>
+
+              <!-- Barra de Ferramentas de Formatação (Negrito de fato, Desfazer, Listas, etc.) -->
+              <div class="flex flex-wrap items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs">
+                <!-- Desfazer e Refazer -->
+                <button type="button" id="btnFmtUndo" title="Desfazer formatação (Ctrl+Z)" class="p-1 px-1.5 rounded hover:bg-slate-800 text-slate-300 hover:text-amber-400 text-xs transition-colors flex items-center gap-1">
+                  <span>↩</span>
+                </button>
+                <button type="button" id="btnFmtRedo" title="Refazer (Ctrl+Y ou Ctrl+Shift+Z)" class="p-1 px-1.5 rounded hover:bg-slate-800 text-slate-300 hover:text-amber-400 text-xs transition-colors flex items-center gap-1">
+                  <span>↪</span>
+                </button>
+                <div class="w-px h-3.5 bg-slate-800 mx-0.5"></div>
+
+                <!-- Negrito e Itálico com visual direto -->
+                <button type="button" id="btnFmtBold" title="Negrito de fato (Ctrl+B)" class="p-1 px-2 rounded hover:bg-slate-800 text-slate-300 hover:text-emerald-400 font-bold text-xs transition-colors">
+                  B
+                </button>
+                <button type="button" id="btnFmtItalic" title="Itálico de fato (Ctrl+I)" class="p-1 px-2 rounded hover:bg-slate-800 text-slate-300 hover:text-emerald-400 italic text-xs transition-colors">
+                  I
+                </button>
+                <div class="w-px h-3.5 bg-slate-800 mx-0.5"></div>
+
+                <!-- Código -->
+                <button type="button" id="btnFmtCode" title="Código inline (`código`)" class="p-1 px-1.5 rounded hover:bg-slate-800 text-slate-300 hover:text-cyan-400 font-mono text-[11px] transition-colors">
+                  &lt;/&gt;
+                </button>
+                <button type="button" id="btnFmtCodeBlock" title="Bloco de código (```code```)" class="p-1 px-1.5 rounded hover:bg-slate-800 text-slate-300 hover:text-cyan-400 font-mono text-[11px] transition-colors">
+                  { }
+                </button>
+                <div class="w-px h-3.5 bg-slate-800 mx-0.5"></div>
+
+                <!-- Listas -->
+                <button type="button" id="btnFmtBulletList" title="Lista com marcadores (- item)" class="p-1 px-1.5 rounded hover:bg-slate-800 text-slate-300 hover:text-emerald-400 text-xs transition-colors">
+                  • Lista
+                </button>
+                <button type="button" id="btnFmtOrderedList" title="Lista numerada (1. item)" class="p-1 px-1.5 rounded hover:bg-slate-800 text-slate-300 hover:text-emerald-400 text-xs transition-colors">
+                  1. Lista
+                </button>
+                <div class="w-px h-3.5 bg-slate-800 mx-0.5"></div>
+
+                <!-- Expandir Altura Completa -->
+                <button type="button" id="btnToggleExpand" title="Expandir/Compactar altura para leitura confortável" class="p-1 px-2 rounded hover:bg-slate-800 text-slate-300 hover:text-emerald-400 text-xs transition-colors flex items-center gap-1">
+                  <span id="expandToggleIcon">↕</span>
+                  <span id="expandToggleText">Expandir</span>
+                </button>
+
+                <!-- Alternar Modo Markdown/Visual -->
+                <button type="button" id="btnTogglePreview" title="Alternar entre Editor Visual Rico e Código Markdown" class="p-1 px-2 rounded hover:bg-slate-800 text-indigo-400 hover:text-indigo-300 text-xs font-medium transition-colors flex items-center gap-1">
+                  <span id="previewToggleIcon">👁️</span>
+                  <span id="previewToggleText">Markdown</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Editor Rico Visual Direto (Negrito de fato, responsivo e com descida suave) -->
+            <div id="ticketDescriptionEditor" contenteditable="true" spellcheck="false" role="textbox" aria-multiline="true" data-placeholder="Contexto:&#10;...&#10;&#10;Passos para reprodução:&#10;1. ...&#10;&#10;Comportamento Esperado vs Obtido:&#10;..." class="rich-editor w-full bg-slate-950 border border-slate-700/80 rounded-xl p-3.5 text-xs sm:text-sm text-slate-200 focus:outline-none focus:border-emerald-500 transition-all leading-relaxed font-sans min-h-[220px] max-h-[520px] overflow-y-auto"></div>
+
+            <!-- Textarea de Fallback/Código Markdown (Oculto no modo visual padrão) -->
+            <textarea id="ticketDescription" rows="8" placeholder="Contexto:&#10;...&#10;&#10;Passos para reprodução:&#10;1. ...&#10;&#10;Comportamento Esperado vs Obtido:&#10;..." class="hidden w-full bg-slate-950 border border-slate-700/80 rounded-xl p-3 text-xs sm:text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors leading-relaxed font-mono min-h-[220px] max-h-[520px] overflow-y-auto"></textarea>
+
+            <!-- Pré-visualização Formatada com Markdown Rico -->
+            <div id="ticketDescriptionPreview" class="hidden w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-xs text-slate-200 leading-relaxed max-h-[300px] overflow-auto markdown-preview"></div>
+
+            <!-- Rodapé informativo do editor com atalhos e botão de descida da barra -->
+            <div class="flex flex-wrap items-center justify-between text-[11px] text-slate-400 pt-1 px-1">
+              <div class="flex items-center gap-2">
+                <span>Atalhos:</span>
+                <span class="inline-flex items-center gap-1">
+                  <kbd class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 text-[10px] font-mono">Ctrl+B</kbd>
+                  <span class="text-slate-500">Negrito</span>
+                </span>
+                <span class="inline-flex items-center gap-1">
+                  <kbd class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 text-[10px] font-mono">Ctrl+Z</kbd>
+                  <span class="text-slate-500">Desfazer</span>
+                </span>
+                <span class="inline-flex items-center gap-1 hidden sm:inline-flex">
+                  <kbd class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 text-[10px] font-mono">Ctrl+I</kbd>
+                  <span class="text-slate-500">Itálico</span>
+                </span>
+              </div>
+              <button type="button" id="btnScrollBottom" class="text-emerald-400 hover:text-emerald-300 flex items-center gap-1 transition-colors select-none">
+                <span>⬇ Rolar para baixo</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -207,9 +330,15 @@
       <!-- Coluna da Direita: Script Gerado & Ação Rápida de Cópia (5 cols) -->
       <div class="lg:col-span-5 space-y-4 lg:sticky lg:top-24">
 
-        <!-- Botão de Destaque Máximo -->
-        <button type="button" id="btnBigCopy" class="w-full bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-bold py-4 px-6 rounded-2xl shadow-xl shadow-emerald-500/20 glow-emerald flex items-center justify-center gap-3 transition-all-fast text-base sm:text-lg cursor-pointer transform active:scale-[0.99]">
-          <span class="text-xl" id="bigCopyIcon">📋</span>
+        <!-- Botão de Preenchimento via Extensão (1-Clique) -->
+        <button type="button" id="btnSyncExtension" class="w-full bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-bold py-3.5 px-6 rounded-2xl shadow-xl shadow-emerald-500/20 glow-emerald flex items-center justify-center gap-2.5 transition-all-fast text-sm sm:text-base cursor-pointer transform active:scale-[0.99]">
+          <span class="text-xl">⚡</span>
+          <span id="btnSyncExtensionText">Sincronizar com Extensão do Jira</span>
+        </button>
+
+        <!-- Botão Alternativo de Cópia Manual -->
+        <button type="button" id="btnBigCopy" class="w-full bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white font-medium py-2.5 px-4 rounded-xl border border-slate-800/90 flex items-center justify-center gap-2 transition-all text-xs cursor-pointer">
+          <span class="text-sm" id="bigCopyIcon">📋</span>
           <span id="bigCopyText">Copiar Código para o Console</span>
         </button>
 

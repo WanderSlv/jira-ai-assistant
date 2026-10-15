@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Jira AI Assistant</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 320px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #090d16;
+      color: #f1f5f9;
+      padding: 16px;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #1e293b;
+    }
+    .icon {
+      width: 28px;
+      height: 28px;
+      background: linear-gradient(135deg, #10b981, #06b6d4);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+    }
+    .title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #ffffff;
+    }
+    .subtitle {
+      font-size: 11px;
+      color: #94a3b8;
+    }
+    .status-card {
+      margin-top: 12px;
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: 12px;
+      padding: 12px;
+    }
+    .status-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .badge {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 20px;
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .badge-empty {
+      background: rgba(148, 163, 184, 0.1);
+      color: #94a3b8;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+    }
+    .preview-box {
+      font-size: 11px;
+      color: #cbd5e1;
+      line-height: 1.4;
+      max-height: 90px;
+      overflow-y: auto;
+      background: #020617;
+      padding: 8px;
+      border-radius: 8px;
+      border: 1px solid #1e293b;
+    }
+    .fields-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-top: 8px;
+      font-size: 10px;
+      color: #94a3b8;
+    }
+    .field-tag {
+      background: #1e293b;
+      padding: 4px 6px;
+      border-radius: 6px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .field-tag b {
+      color: #f1f5f9;
+    }
+    .btn-action {
+      width: 100%;
+      margin-top: 14px;
+      padding: 11px;
+      border: none;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+      background: linear-gradient(135deg, #10b981, #0d9488);
+      color: #ffffff;
+      box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+    }
+    .btn-action:hover {
+      background: linear-gradient(135deg, #059669, #0f766e);
+      transform: translateY(-1px);
+    }
+    .btn-action:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .footer-link {
+      display: block;
+      text-align: center;
+      margin-top: 12px;
+      font-size: 11px;
+      color: #38bdf8;
+      text-decoration: none;
+    }
+    .footer-link:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="icon">⚡</div>
+    <div>
+      <div class="title">Jira AI Assistant</div>
+      <div class="subtitle">Preenchimento com 1-Clique</div>
+    </div>
+  </div>
+
+  <div class="status-card">
+    <div class="status-row">
+      <span style="font-size: 11px; font-weight: 600;">Status do Chamado:</span>
+      <span id="ticketStatusBadge" class="badge badge-empty">Aguardando dados</span>
+    </div>
+
+    <div class="preview-box" id="ticketPreview">
+      Nenhum chamado gerado recentemente. Gere um chamado no portal local para sincronizar.
+    </div>
+
+    <div class="fields-grid" id="fieldsGrid" style="display: none;">
+      <div class="field-tag">Cliente: <b id="lblCliente">-</b></div>
+      <div class="field-tag">Produto: <b id="lblProduto">-</b></div>
+      <div class="field-tag">Repr: <b id="lblRepr">Wander</b></div>
+      <div class="field-tag">Chamado: <b id="lblChamado">-</b></div>
+    </div>
+  </div>
+
+  <button type="button" class="btn-action" id="btnFillActiveTab">
+    <span>⚡</span>
+    <span>Preencher nesta Aba do Jira</span>
+  </button>
+
+  <a href="http://localhost:3000" target="_blank" class="footer-link">
+    Abrir Portal do Assistente Local ↗
+  </a>
+
+  <script src="popup.js"></script>
+</body>
+</html>

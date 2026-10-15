@@ -57,3 +57,154 @@ code, pre, .font-mono {
 .animate-soft-pulse {
   animation: softPulse 2s infinite ease-in-out;
 }
+
+/* Estilos da pré-visualização de markdown rico */
+.markdown-preview strong {
+  color: #34d399;
+  font-weight: 600;
+}
+
+.markdown-preview em {
+  color: #93c5fd;
+  font-style: italic;
+}
+
+.markdown-preview code {
+  background: rgba(30, 41, 59, 0.9);
+  color: #38bdf8;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  font-size: 0.85em;
+}
+
+.markdown-preview pre {
+  background: #020617;
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 8px 0;
+  overflow-x: auto;
+}
+
+.markdown-preview pre code {
+  background: transparent;
+  color: #a7f3d0;
+  padding: 0;
+  border: none;
+}
+
+.markdown-preview ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin: 6px 0;
+}
+
+.markdown-preview ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+  margin: 6px 0;
+}
+
+.markdown-preview li {
+  margin-bottom: 3px;
+}
+
+.markdown-preview p {
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+/* Editor Rico WYSIWYG responsivo para a Descrição Estruturada */
+.rich-editor {
+  outline: none;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+  scroll-behavior: smooth;
+  min-height: 220px;
+  max-height: 520px;
+  transition: all 0.25s ease;
+  line-height: 1.6;
+}
+
+.rich-editor:focus {
+  border-color: #10b981 !important;
+  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.35);
+}
+
+/* Modo expandido */
+.rich-editor.is-expanded {
+  max-height: none !important;
+  min-height: 480px;
+}
+
+/* Placeholder para contenteditable */
+.rich-editor:empty:before {
+  content: attr(data-placeholder);
+  color: #64748b;
+  pointer-events: none;
+  display: block;
+}
+
+/* Formatações visuais em tempo real dentro do editor (sem precisar de prévia) */
+.rich-editor strong,
+.rich-editor b {
+  font-weight: 700;
+  color: #34d399; /* Destaque esmeralda para texto em negrito de fato */
+  text-shadow: 0 0 1px rgba(52, 211, 153, 0.2);
+}
+
+.rich-editor em,
+.rich-editor i {
+  font-style: italic;
+  color: #93c5fd; /* Destaque azul claro para itálico */
+}
+
+.rich-editor code {
+  background: rgba(30, 41, 59, 0.9);
+  color: #38bdf8;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85em;
+}
+
+.rich-editor pre {
+  background: #020617;
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 8px 0;
+  overflow-x: auto;
+}
+
+.rich-editor pre code {
+  background: transparent;
+  color: #a7f3d0;
+  padding: 0;
+  border: none;
+}
+
+.rich-editor ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin: 6px 0;
+}
+
+.rich-editor ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+  margin: 6px 0;
+}
+
+.rich-editor li {
+  margin-bottom: 3px;
+}
+
+.rich-editor p {
+  margin-bottom: 8px;
+}
+
+

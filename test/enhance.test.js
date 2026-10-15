@@ -1,12 +1,20 @@
 const test = require('node:test');
 const assert = require('node:assert');
+const fs = require('fs');
+const path = require('path');
 const app = require('../server.js');
 
 let server;
 let baseUrl;
 const originalApiKey = process.env.GEMINI_API_KEY;
+const originalModel = process.env.GEMINI_MODEL;
+const ENV_FILE = path.join(__dirname, '..', '.env');
+let originalEnvContent = null;
 
 test.before(async () => {
+  if (fs.existsSync(ENV_FILE)) {
+    originalEnvContent = fs.readFileSync(ENV_FILE, 'utf8');
+  }
   // Garantir que a chave está vazia para testar o fallback local
   process.env.NODE_ENV = 'test';
   delete process.env.GEMINI_API_KEY;
@@ -22,6 +30,12 @@ test.before(async () => {
 test.after(async () => {
   if (originalApiKey !== undefined) {
     process.env.GEMINI_API_KEY = originalApiKey;
+  }
+  if (originalModel !== undefined) {
+    process.env.GEMINI_MODEL = originalModel;
+  }
+  if (originalEnvContent !== null) {
+    fs.writeFileSync(ENV_FILE, originalEnvContent, 'utf8');
   }
   if (server) {
     await new Promise((resolve) => server.close(resolve));
@@ -87,6 +101,31 @@ test('POST /api/enhance fallback deve lidar com campos ausentes usando valores p
   assert.ok(data.descricao.includes('Nina'));
 });
 
+test('POST /api/enhance extrai produto, cliente e número de chamado da explicação bruta e fixa representante Wander', async () => {
+  const payload = {
+    type: 'bug',
+    rawText: 'Cliente: Hospital Alvorada\nProduto: NinaFlow\nChamado: #77881\nErro na fila de disparo.'
+  };
+
+  const response = await fetch(`${baseUrl}/api/enhance`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  assert.strictEqual(response.status, 200);
+  const data = await response.json();
+  assert.strictEqual(data.fields.Cliente, 'Hospital Alvorada');
+  assert.strictEqual(data.fields.Produto, 'NinaFlow');
+  assert.strictEqual(data.fields.NumeroChamado, '77881');
+  assert.strictEqual(data.fields.Representante, 'Wander');
+  assert.strictEqual(data.detectedFields.Cliente, 'Hospital Alvorada');
+  assert.strictEqual(data.detectedFields.Produto, 'NinaFlow');
+  assert.strictEqual(data.detectedFields.NumeroChamado, '77881');
+  assert.strictEqual(data.detectedFields.Representante, 'Wander');
+  assert.ok(data.titulo.startsWith('[NinaFlow]'));
+});
+
 test('GET e POST /api/config gerenciam modelo e chave do Gemini com segurança', async () => {
   const resGet = await fetch(`${baseUrl}/api/config`);
   assert.strictEqual(resGet.status, 200);
@@ -106,6 +145,7 @@ test('GET e POST /api/config gerenciam modelo e chave do Gemini com segurança',
   assert.strictEqual(dataPost.hasGeminiKey, true);
   assert.strictEqual(dataPost.maskedKey.startsWith('AIzaSy'), true);
   assert.strictEqual(dataPost.geminiModel, 'gemini-2.0-flash');
+  delete process.env.GEMINI_API_KEY;
 });
 
 test('POST /api/test-google-key valida chave ausente com 400', async () => {
@@ -117,4 +157,25 @@ test('POST /api/test-google-key valida chave ausente com 400', async () => {
   assert.strictEqual(response.status, 400);
   const data = await response.json();
   assert.strictEqual(data.valid, false);
+});
+
+test('POST /api/enhance aceita evidências de imagens (prints em base64) no fallback e processamento', async () => {
+  const fakePngBase64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  const payload = {
+    type: 'bug',
+    rawText: 'Erro exibido na tela ao salvar formulário',
+    images: [fakePngBase64]
+  };
+
+  const response = await fetch(`${baseUrl}/api/enhance`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  assert.strictEqual(response.status, 200);
+  const data = await response.json();
+  assert.ok(data.titulo);
+  assert.ok(data.descricao);
+  assert.strictEqual(data.fields.Representante, 'Wander');
 });

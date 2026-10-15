@@ -17,7 +17,8 @@
     currentScript: '',
     hasGoogleKey: false,
     googleModel: 'gemini-2.0-flash',
-    providerPreference: 'gemini'
+    providerPreference: 'gemini',
+    evidenceImages: []
   };
 
   // Elementos do DOM
@@ -70,7 +71,37 @@
     providerOllamaBtn: document.getElementById('providerOllamaBtn'),
     aiStatusBanner: document.getElementById('aiStatusBanner'),
     aiStatusText: document.getElementById('aiStatusText'),
-    aiLatencyBadge: document.getElementById('aiLatencyBadge')
+    aiLatencyBadge: document.getElementById('aiLatencyBadge'),
+    detectedFieldsBadge: document.getElementById('detectedFieldsBadge'),
+    detectedFieldsText: document.getElementById('detectedFieldsText'),
+    extensionStatusBadge: document.getElementById('extensionStatusBadge'),
+    extensionStatusText: document.getElementById('extensionStatusText'),
+    btnSyncExtension: document.getElementById('btnSyncExtension'),
+    btnSyncExtensionText: document.getElementById('btnSyncExtensionText'),
+    // Elementos de Evidências (Prints/Imagens)
+    evidenceFileInput: document.getElementById('evidenceFileInput'),
+    evidenceDropzone: document.getElementById('evidenceDropzone'),
+    evidenceEmptyNotice: document.getElementById('evidenceEmptyNotice'),
+    evidenceThumbnails: document.getElementById('evidenceThumbnails'),
+    evidenceCountBadge: document.getElementById('evidenceCountBadge'),
+    // Editor Rico da Descrição Estruturada e Ferramentas
+    ticketDescriptionEditor: document.getElementById('ticketDescriptionEditor'),
+    btnFmtUndo: document.getElementById('btnFmtUndo'),
+    btnFmtRedo: document.getElementById('btnFmtRedo'),
+    btnFmtBold: document.getElementById('btnFmtBold'),
+    btnFmtItalic: document.getElementById('btnFmtItalic'),
+    btnFmtCode: document.getElementById('btnFmtCode'),
+    btnFmtCodeBlock: document.getElementById('btnFmtCodeBlock'),
+    btnFmtBulletList: document.getElementById('btnFmtBulletList'),
+    btnFmtOrderedList: document.getElementById('btnFmtOrderedList'),
+    btnToggleExpand: document.getElementById('btnToggleExpand'),
+    expandToggleIcon: document.getElementById('expandToggleIcon'),
+    expandToggleText: document.getElementById('expandToggleText'),
+    btnTogglePreview: document.getElementById('btnTogglePreview'),
+    previewToggleIcon: document.getElementById('previewToggleIcon'),
+    previewToggleText: document.getElementById('previewToggleText'),
+    btnScrollBottom: document.getElementById('btnScrollBottom'),
+    ticketDescriptionPreview: document.getElementById('ticketDescriptionPreview')
   };
 
   let toastTimeout = null;
@@ -93,12 +124,16 @@
       Cliente: elements.fieldCliente.value.trim() || 'Nina',
       Produto: elements.fieldProduto.value.trim() || 'ninachat',
       Prioridade: elements.fieldPrioridade.value || 'Baixo',
-      Representante: elements.fieldRepresentante.value.trim() || 'Wander',
+      Representante: 'Wander',
       NumeroChamado: elements.fieldNumeroChamado.value.trim() || '-'
     };
+    elements.fieldRepresentante.value = 'Wander';
 
+    const numInfo = state.currentFields.NumeroChamado && state.currentFields.NumeroChamado !== '-'
+      ? ` | Chamado: ${state.currentFields.NumeroChamado}`
+      : '';
     elements.summaryFields.textContent = 
-      `Cliente: ${state.currentFields.Cliente} | Produto: ${state.currentFields.Produto} | Prioridade: ${state.currentFields.Prioridade} | Repr: ${state.currentFields.Representante}`;
+      `Cliente: ${state.currentFields.Cliente} | Produto: ${state.currentFields.Produto} | Prioridade: ${state.currentFields.Prioridade} | Repr: Wander${numInfo}`;
   }
 
   function setInputsFromFields(fields) {
@@ -106,14 +141,100 @@
     elements.fieldCliente.value = fields.Cliente || 'Nina';
     elements.fieldProduto.value = fields.Produto || 'ninachat';
     elements.fieldPrioridade.value = fields.Prioridade || 'Baixo';
-    elements.fieldRepresentante.value = fields.Representante || 'Wander';
+    elements.fieldRepresentante.value = 'Wander';
     elements.fieldNumeroChamado.value = fields.NumeroChamado || '-';
     syncFieldsFromInputs();
   }
 
+  function tryExtractAndApplyFields(text, showToastOnDetect = false) {
+    if (!text || typeof text !== 'string' || !text.trim()) {
+      if (elements.detectedFieldsBadge) elements.detectedFieldsBadge.classList.add('hidden');
+      return null;
+    }
+
+    if (typeof extractFieldsFromRawText !== 'function') {
+      return null;
+    }
+
+    const extracted = extractFieldsFromRawText(text);
+    const detectedParts = [];
+    let changed = false;
+
+    if (extracted.cliente) {
+      if (elements.fieldCliente.value !== extracted.cliente) {
+        elements.fieldCliente.value = extracted.cliente;
+        changed = true;
+      }
+      detectedParts.push(`Cliente: ${extracted.cliente}`);
+    }
+
+    if (extracted.produto) {
+      if (elements.fieldProduto.value !== extracted.produto) {
+        elements.fieldProduto.value = extracted.produto;
+        changed = true;
+      }
+      detectedParts.push(`Produto: ${extracted.produto}`);
+    }
+
+    if (extracted.numeroChamado) {
+      if (elements.fieldNumeroChamado.value !== extracted.numeroChamado) {
+        elements.fieldNumeroChamado.value = extracted.numeroChamado;
+        changed = true;
+      }
+      detectedParts.push(`Chamado: ${extracted.numeroChamado}`);
+    }
+
+    // O representante sempre vai ser Wander
+    if (elements.fieldRepresentante.value !== 'Wander') {
+      elements.fieldRepresentante.value = 'Wander';
+      changed = true;
+    }
+
+    if (detectedParts.length > 0) {
+      if (elements.detectedFieldsBadge && elements.detectedFieldsText) {
+        elements.detectedFieldsText.textContent = `🎯 Identificado: ${detectedParts.join(' | ')}`;
+        elements.detectedFieldsBadge.classList.remove('hidden');
+      }
+    } else {
+      if (elements.detectedFieldsBadge) {
+        elements.detectedFieldsBadge.classList.add('hidden');
+      }
+    }
+
+    if (changed) {
+      syncFieldsFromInputs();
+      updateScriptPreview();
+      if (showToastOnDetect && detectedParts.length > 0) {
+        showToast(`Campos padrão pré-fixados atualizados: ${detectedParts.join(', ')}`, '🎯');
+      }
+    }
+
+    return extracted;
+  }
+
+  function syncTicketWithExtension(showToastMsg = false) {
+    const desc = getStructuredDescription();
+    const payload = {
+      titulo: elements.ticketTitle.value || state.title || '',
+      descricao: desc || state.description || '',
+      fields: state.currentFields,
+      images: state.evidenceImages,
+      updatedAt: Date.now()
+    };
+
+    window.postMessage({
+      type: 'JIRA_ASSISTANT_SAVE_TICKET',
+      payload: payload
+    }, '*');
+
+    if (showToastMsg) {
+      showToast('Chamado sincronizado com a Extensão do Jira! Abra o Jira para preencher.', '⚡', 3500);
+    }
+  }
+
   function updateScriptPreview() {
     state.title = elements.ticketTitle.value;
-    state.description = elements.ticketDescription.value;
+    state.description = getStructuredDescription();
 
     const script = generateJiraScript({
       titulo: state.title,
@@ -123,6 +244,231 @@
 
     state.currentScript = script;
     elements.codeOutput.textContent = script;
+
+    syncTicketWithExtension(false);
+    updateMarkdownPreviewIfOpen();
+  }
+
+  // Manipulação de Evidências (Prints / Imagens)
+  function addEvidenceFile(file) {
+    if (!file || !file.type.startsWith('image/')) {
+      showToast('Por favor, selecione apenas arquivos de imagem (PNG, JPEG, WebP)', '⚠️');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target.result;
+      const newImg = {
+        id: 'img_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+        name: file.name || 'print.png',
+        size: (file.size / 1024).toFixed(0) + ' KB',
+        dataUrl: dataUrl
+      };
+      state.evidenceImages.push(newImg);
+      renderEvidenceThumbnails();
+      syncTicketWithExtension(false);
+      showToast(`Print "${newImg.name}" anexado com sucesso!`, '📸');
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function removeEvidenceImage(id) {
+    state.evidenceImages = state.evidenceImages.filter(img => img.id !== id);
+    renderEvidenceThumbnails();
+    syncTicketWithExtension(false);
+  }
+
+  function renderEvidenceThumbnails() {
+    if (!elements.evidenceThumbnails) return;
+    const count = state.evidenceImages.length;
+    if (count === 0) {
+      if (elements.evidenceEmptyNotice) elements.evidenceEmptyNotice.classList.remove('hidden');
+      elements.evidenceThumbnails.classList.add('hidden');
+      if (elements.evidenceCountBadge) elements.evidenceCountBadge.classList.add('hidden');
+      elements.evidenceThumbnails.innerHTML = '';
+      return;
+    }
+
+    if (elements.evidenceEmptyNotice) elements.evidenceEmptyNotice.classList.add('hidden');
+    elements.evidenceThumbnails.classList.remove('hidden');
+    if (elements.evidenceCountBadge) {
+      elements.evidenceCountBadge.classList.remove('hidden');
+      elements.evidenceCountBadge.textContent = `${count} print${count > 1 ? 's' : ''}`;
+    }
+
+    elements.evidenceThumbnails.innerHTML = state.evidenceImages.map(img => `
+      <div class="relative group rounded-lg overflow-hidden border border-slate-700 bg-slate-900 aspect-video flex items-center justify-center">
+        <img src="${img.dataUrl}" alt="${img.name}" class="w-full h-full object-cover">
+        <div class="absolute inset-0 bg-slate-950/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-1.5">
+          <span class="text-[9px] text-slate-200 truncate font-mono">${img.name} (${img.size})</span>
+          <button type="button" data-remove-id="${img.id}" class="btn-remove-evidence self-end bg-rose-600/90 hover:bg-rose-500 text-white rounded p-1 text-[10px] transition-colors" title="Remover print">
+            ✕
+          </button>
+        </div>
+      </div>
+    `).join('');
+
+    elements.evidenceThumbnails.querySelectorAll('.btn-remove-evidence').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = btn.getAttribute('data-remove-id');
+        removeEvidenceImage(id);
+      });
+    });
+  }
+
+  // Obtém o conteúdo da Descrição Estruturada sempre convertido em Markdown limpo para o Jira
+  function getStructuredDescription() {
+    if (elements.ticketDescriptionEditor && !elements.ticketDescriptionEditor.classList.contains('hidden')) {
+      const html = elements.ticketDescriptionEditor.innerHTML || '';
+      if (typeof htmlToMarkdown === 'function') {
+        return htmlToMarkdown(html);
+      }
+      return elements.ticketDescriptionEditor.innerText || '';
+    }
+    return (elements.ticketDescription && elements.ticketDescription.value) || '';
+  }
+
+  // Define o conteúdo da Descrição Estruturada e atualiza tanto o editor rico quanto o textarea
+  function setStructuredDescription(mdText, shouldScrollBottom = false) {
+    const rawVal = mdText || '';
+    if (elements.ticketDescription) {
+      elements.ticketDescription.value = rawVal;
+    }
+    if (elements.ticketDescriptionEditor) {
+      if (typeof markdownToHtml === 'function') {
+        elements.ticketDescriptionEditor.innerHTML = markdownToHtml(rawVal);
+      } else {
+        elements.ticketDescriptionEditor.textContent = rawVal;
+      }
+      if (shouldScrollBottom) {
+        setTimeout(() => {
+          autoScrollEditorDown(true);
+        }, 80);
+      }
+    }
+    updateScriptPreview();
+  }
+
+  // Rola suavemente a barra de rolagem do editor para o final para leitura confortável
+  function autoScrollEditorDown(smooth = true) {
+    const ed = elements.ticketDescriptionEditor;
+    if (!ed) return;
+    ed.scrollTo({
+      top: ed.scrollHeight,
+      behavior: smooth ? 'smooth' : 'auto'
+    });
+  }
+
+  // Alterna a altura expandida para leitura completa sem scrollbars internos
+  let isEditorExpanded = false;
+  function toggleExpandEditor() {
+    isEditorExpanded = !isEditorExpanded;
+    const ed = elements.ticketDescriptionEditor;
+    const ta = elements.ticketDescription;
+
+    if (ed) {
+      if (isEditorExpanded) {
+        ed.classList.add('is-expanded');
+      } else {
+        ed.classList.remove('is-expanded');
+      }
+    }
+    if (ta) {
+      if (isEditorExpanded) {
+        ta.classList.add('is-expanded');
+        ta.style.maxHeight = 'none';
+        ta.style.minHeight = '480px';
+      } else {
+        ta.classList.remove('is-expanded');
+        ta.style.maxHeight = '520px';
+        ta.style.minHeight = '220px';
+      }
+    }
+    if (elements.expandToggleIcon) elements.expandToggleIcon.textContent = isEditorExpanded ? '⬆' : '↕';
+    if (elements.expandToggleText) elements.expandToggleText.textContent = isEditorExpanded ? 'Compactar' : 'Expandir';
+  }
+
+  // Aplica comandos de formatação rica que entram nativamente no histórico de Undo (Ctrl+Z)
+  function applyRichFormatting(command, value = null) {
+    const ed = elements.ticketDescriptionEditor;
+    if (!ed) return;
+    ed.focus();
+    try {
+      document.execCommand(command, false, value);
+    } catch (e) {
+      console.warn('Erro ao executar comando de formatação:', command, e);
+    }
+    syncEditorToState();
+  }
+
+  // Sincroniza o editor rico com o estado global e a geração de script do Jira
+  function syncEditorToState() {
+    const md = getStructuredDescription();
+    if (elements.ticketDescription) {
+      elements.ticketDescription.value = md;
+    }
+    state.description = md;
+    updateScriptPreview();
+  }
+
+  // Insere código inline com tag <code> preservando desfazer (Ctrl+Z)
+  function insertInlineCode() {
+    const ed = elements.ticketDescriptionEditor;
+    if (!ed) return;
+    ed.focus();
+    const sel = window.getSelection();
+    let text = 'código';
+    if (sel && sel.rangeCount > 0 && !sel.isCollapsed) {
+      text = sel.toString();
+    }
+    document.execCommand('insertHTML', false, `<code>${text}</code>`);
+    syncEditorToState();
+  }
+
+  // Insere bloco de código com <pre><code> preservando desfazer (Ctrl+Z)
+  function insertCodeBlock() {
+    const ed = elements.ticketDescriptionEditor;
+    if (!ed) return;
+    ed.focus();
+    const sel = window.getSelection();
+    let text = '// Insira seu código aqui';
+    if (sel && sel.rangeCount > 0 && !sel.isCollapsed) {
+      text = sel.toString();
+    }
+    document.execCommand('insertHTML', false, `<pre><code>${text}</code></pre><p><br></p>`);
+    syncEditorToState();
+  }
+
+  let isMarkdownMode = false;
+  function toggleMarkdownPreview() {
+    isMarkdownMode = !isMarkdownMode;
+    const ed = elements.ticketDescriptionEditor;
+    const ta = elements.ticketDescription;
+
+    if (isMarkdownMode) {
+      // Modo código Markdown cru
+      const md = getStructuredDescription();
+      if (ta) {
+        ta.value = md;
+        ta.classList.remove('hidden');
+      }
+      if (ed) ed.classList.add('hidden');
+      if (elements.previewToggleIcon) elements.previewToggleIcon.textContent = '✏️';
+      if (elements.previewToggleText) elements.previewToggleText.textContent = 'Visual';
+    } else {
+      // Modo Visual Rico (com negrito, listas e código de fato)
+      const md = (ta && ta.value) || '';
+      if (ed) {
+        ed.innerHTML = typeof markdownToHtml === 'function' ? markdownToHtml(md) : md;
+        ed.classList.remove('hidden');
+      }
+      if (ta) ta.classList.add('hidden');
+      if (elements.previewToggleIcon) elements.previewToggleIcon.textContent = '👁️';
+      if (elements.previewToggleText) elements.previewToggleText.textContent = 'Markdown';
+    }
+    updateScriptPreview();
   }
 
   async function loadPresets() {
@@ -374,6 +720,7 @@
       return;
     }
 
+    tryExtractAndApplyFields(raw, false);
     syncFieldsFromInputs();
 
     // Estado visual de carregamento
@@ -394,7 +741,8 @@
           rawText: raw,
           fields: state.currentFields,
           providerPreference: state.providerPreference,
-          customModel: state.googleModel
+          customModel: state.googleModel,
+          images: state.evidenceImages.map(img => img.dataUrl)
         })
       });
 
@@ -402,11 +750,35 @@
       const data = await res.json();
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 
+      // Atualiza campos detectados retornados pela API
+      if (data.fields) {
+        if (data.fields.Cliente) elements.fieldCliente.value = data.fields.Cliente;
+        if (data.fields.Produto) elements.fieldProduto.value = data.fields.Produto;
+        if (data.fields.NumeroChamado && data.fields.NumeroChamado !== '-') {
+          elements.fieldNumeroChamado.value = data.fields.NumeroChamado;
+        }
+        elements.fieldRepresentante.value = 'Wander';
+        syncFieldsFromInputs();
+      }
+
+      if (data.detectedFields) {
+        const parts = [];
+        if (data.detectedFields.Cliente) parts.push(`Cliente: ${data.detectedFields.Cliente}`);
+        if (data.detectedFields.Produto) parts.push(`Produto: ${data.detectedFields.Produto}`);
+        if (data.detectedFields.NumeroChamado && data.detectedFields.NumeroChamado !== '-') {
+          parts.push(`Chamado: ${data.detectedFields.NumeroChamado}`);
+        }
+        if (parts.length > 0 && elements.detectedFieldsBadge && elements.detectedFieldsText) {
+          elements.detectedFieldsText.textContent = `🎯 Identificado: ${parts.join(' | ')}`;
+          elements.detectedFieldsBadge.classList.remove('hidden');
+        }
+      }
+
       if (data.titulo) {
         elements.ticketTitle.value = data.titulo;
       }
       if (data.descricao) {
-        elements.ticketDescription.value = data.descricao;
+        setStructuredDescription(data.descricao, true);
       }
 
       updateScriptPreview();
@@ -432,8 +804,9 @@
       if (!elements.ticketTitle.value) {
         elements.ticketTitle.value = `[${state.currentFields.Produto}] - ${raw.slice(0, 50)}...`;
       }
-      if (!elements.ticketDescription.value) {
-        elements.ticketDescription.value = `Contexto:\n${raw}\n\nProduto afetado: ${state.currentFields.Produto}\nCliente: ${state.currentFields.Cliente}`;
+      if (!getStructuredDescription()) {
+        const fallbackDesc = `Contexto:\n${raw}\n\nProduto afetado: ${state.currentFields.Produto}\nCliente: ${state.currentFields.Cliente}`;
+        setStructuredDescription(fallbackDesc, true);
       }
       updateScriptPreview();
     } finally {
@@ -524,18 +897,104 @@
 
   elements.btnSavePreset.addEventListener('click', savePresetDefaults);
 
+  function autoResizeTextarea(el, minHeight = 96) {
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.max(el.scrollHeight, minHeight) + 'px';
+  }
+
   elements.btnClearRaw.addEventListener('click', () => {
     elements.rawText.value = '';
+    if (elements.detectedFieldsBadge) elements.detectedFieldsBadge.classList.add('hidden');
+    autoResizeTextarea(elements.rawText, 96);
     elements.rawText.focus();
   });
+
+  if (elements.rawText) {
+    elements.rawText.addEventListener('input', () => {
+      autoResizeTextarea(elements.rawText, 96);
+      tryExtractAndApplyFields(elements.rawText.value, false);
+    });
+
+    elements.rawText.addEventListener('paste', () => {
+      setTimeout(() => {
+        autoResizeTextarea(elements.rawText, 96);
+        tryExtractAndApplyFields(elements.rawText.value, true);
+      }, 50);
+    });
+  }
 
   elements.btnEnhance.addEventListener('click', handleEnhanceWithAI);
 
   elements.ticketTitle.addEventListener('input', updateScriptPreview);
-  elements.ticketDescription.addEventListener('input', updateScriptPreview);
+
+  if (elements.ticketDescription) {
+    elements.ticketDescription.addEventListener('input', updateScriptPreview);
+  }
+
+  if (elements.ticketDescriptionEditor) {
+    // Sincroniza em tempo real com o script do Jira ao digitar ou colar
+    elements.ticketDescriptionEditor.addEventListener('input', () => {
+      syncEditorToState();
+    });
+
+    // Atalhos de teclado: Ctrl+B (Negrito), Ctrl+I (Itálico), Ctrl+Z (Desfazer nativo)
+    elements.ticketDescriptionEditor.addEventListener('keydown', (e) => {
+      const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+
+      // Ctrl + B: Negrito de fato
+      if (isCtrlOrCmd && (e.key === 'b' || e.key === 'B')) {
+        e.preventDefault();
+        applyRichFormatting('bold');
+        return;
+      }
+
+      // Ctrl + I: Itálico de fato
+      if (isCtrlOrCmd && (e.key === 'i' || e.key === 'I')) {
+        e.preventDefault();
+        applyRichFormatting('italic');
+        return;
+      }
+
+      // Ctrl + Z: Desfazer com sincronização do estado
+      if (isCtrlOrCmd && (e.key === 'z' || e.key === 'Z')) {
+        setTimeout(() => syncEditorToState(), 20);
+      } else if (isCtrlOrCmd && (e.key === 'y' || e.key === 'Y')) {
+        setTimeout(() => syncEditorToState(), 20);
+      }
+    });
+
+    // Acompanha a digitação mantendo o scroll descendo suavemente caso esteja no fim
+    elements.ticketDescriptionEditor.addEventListener('keyup', (e) => {
+      if (e.key === 'Enter' || e.key.length === 1) {
+        const ed = elements.ticketDescriptionEditor;
+        const scrollDelta = ed.scrollHeight - ed.scrollTop - ed.clientHeight;
+        if (scrollDelta < 100) {
+          ed.scrollTo({ top: ed.scrollHeight, behavior: 'smooth' });
+        }
+      }
+    });
+  }
+
+  if (elements.btnSyncExtension) {
+    elements.btnSyncExtension.addEventListener('click', () => {
+      updateScriptPreview();
+      syncTicketWithExtension(true);
+    });
+  }
 
   elements.btnBigCopy.addEventListener('click', copyScriptToClipboard);
   elements.btnSmallCopy.addEventListener('click', copyScriptToClipboard);
+
+  // Ouve notificações da extensão do Chrome
+  window.addEventListener('message', (e) => {
+    if (!e.data) return;
+    if (e.data.type === 'JIRA_ASSISTANT_EXTENSION_STATUS' && e.data.installed) {
+      if (elements.extensionStatusBadge) {
+        elements.extensionStatusBadge.classList.remove('hidden');
+      }
+    }
+  });
 
   // Listeners de Autenticação Google e Provedores
   if (elements.btnOpenGoogleModal) {
@@ -575,6 +1034,104 @@
   }
   if (elements.providerOllamaBtn) {
     elements.providerOllamaBtn.addEventListener('click', () => setProviderPreference('ollama'));
+  }
+
+  // Listeners de Evidências (Prints / Imagens)
+  if (elements.evidenceFileInput) {
+    elements.evidenceFileInput.addEventListener('change', (e) => {
+      const files = Array.from(e.target.files || []);
+      files.forEach(f => addEvidenceFile(f));
+      elements.evidenceFileInput.value = '';
+    });
+  }
+
+  if (elements.evidenceDropzone) {
+    elements.evidenceDropzone.addEventListener('click', (e) => {
+      if (!e.target.closest('.btn-remove-evidence')) {
+        elements.evidenceFileInput.click();
+      }
+    });
+
+    elements.evidenceDropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      elements.evidenceDropzone.classList.add('border-emerald-500', 'bg-emerald-500/10');
+    });
+
+    elements.evidenceDropzone.addEventListener('dragleave', () => {
+      elements.evidenceDropzone.classList.remove('border-emerald-500', 'bg-emerald-500/10');
+    });
+
+    elements.evidenceDropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      elements.evidenceDropzone.classList.remove('border-emerald-500', 'bg-emerald-500/10');
+      const files = Array.from(e.dataTransfer.files || []).filter(f => f.type.startsWith('image/'));
+      if (files.length > 0) {
+        files.forEach(f => addEvidenceFile(f));
+      } else {
+        showToast('Nenhuma imagem detectada no arquivo solto', '⚠️');
+      }
+    });
+  }
+
+  // Listener global de Ctrl+V para colar prints de qualquer lugar da tela
+  document.addEventListener('paste', (e) => {
+    if (!e.clipboardData || !e.clipboardData.items) return;
+    const items = Array.from(e.clipboardData.items);
+    const imageItems = items.filter(it => it.type.startsWith('image/'));
+    if (imageItems.length > 0) {
+      e.preventDefault();
+      imageItems.forEach(item => {
+        const blob = item.getAsFile();
+        if (blob) {
+          const timestamp = new Date().toISOString().slice(11, 19).replace(/:/g, '-');
+          const file = new File([blob], `print_${timestamp}.png`, { type: blob.type || 'image/png' });
+          addEvidenceFile(file);
+        }
+      });
+    }
+  });
+
+  // Listeners da Barra de Formatação Rica (Negrito de fato, Desfazer, Listas e Código)
+  if (elements.btnFmtUndo) {
+    elements.btnFmtUndo.addEventListener('mousedown', (e) => e.preventDefault());
+    elements.btnFmtUndo.addEventListener('click', () => applyRichFormatting('undo'));
+  }
+  if (elements.btnFmtRedo) {
+    elements.btnFmtRedo.addEventListener('mousedown', (e) => e.preventDefault());
+    elements.btnFmtRedo.addEventListener('click', () => applyRichFormatting('redo'));
+  }
+  if (elements.btnFmtBold) {
+    elements.btnFmtBold.addEventListener('mousedown', (e) => e.preventDefault());
+    elements.btnFmtBold.addEventListener('click', () => applyRichFormatting('bold'));
+  }
+  if (elements.btnFmtItalic) {
+    elements.btnFmtItalic.addEventListener('mousedown', (e) => e.preventDefault());
+    elements.btnFmtItalic.addEventListener('click', () => applyRichFormatting('italic'));
+  }
+  if (elements.btnFmtCode) {
+    elements.btnFmtCode.addEventListener('mousedown', (e) => e.preventDefault());
+    elements.btnFmtCode.addEventListener('click', insertInlineCode);
+  }
+  if (elements.btnFmtCodeBlock) {
+    elements.btnFmtCodeBlock.addEventListener('mousedown', (e) => e.preventDefault());
+    elements.btnFmtCodeBlock.addEventListener('click', insertCodeBlock);
+  }
+  if (elements.btnFmtBulletList) {
+    elements.btnFmtBulletList.addEventListener('mousedown', (e) => e.preventDefault());
+    elements.btnFmtBulletList.addEventListener('click', () => applyRichFormatting('insertUnorderedList'));
+  }
+  if (elements.btnFmtOrderedList) {
+    elements.btnFmtOrderedList.addEventListener('mousedown', (e) => e.preventDefault());
+    elements.btnFmtOrderedList.addEventListener('click', () => applyRichFormatting('insertOrderedList'));
+  }
+  if (elements.btnToggleExpand) {
+    elements.btnToggleExpand.addEventListener('click', toggleExpandEditor);
+  }
+  if (elements.btnTogglePreview) {
+    elements.btnTogglePreview.addEventListener('click', toggleMarkdownPreview);
+  }
+  if (elements.btnScrollBottom) {
+    elements.btnScrollBottom.addEventListener('click', () => autoScrollEditorDown(true));
   }
 
   // Fechar modal ao clicar fora da caixa

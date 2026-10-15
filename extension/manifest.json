@@ -1,0 +1,47 @@
+{
+  "manifest_version": 3,
+  "name": "Jira AI Assistant - Preenchimento Automático",
+  "version": "1.0.0",
+  "description": "Preenche chamados no Jira com 1-clique e seleciona opções do React-Select automaticamente.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://*.atlassian.net/*",
+    "http://localhost:3000/*",
+    "http://127.0.0.1:3000/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Jira AI Assistant",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://*.atlassian.net/*"],
+      "all_frames": true,
+      "js": ["content_jira.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "http://localhost:3000/*",
+        "http://127.0.0.1:3000/*"
+      ],
+      "js": ["content_assistant.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["inpage_fiber.js"],
+      "matches": ["https://*.atlassian.net/*"]
+    }
+  ]
+}

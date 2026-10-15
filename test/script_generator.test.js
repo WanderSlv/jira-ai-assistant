@@ -75,3 +75,90 @@ test('generateJiraScript lida com caracteres especiais, aspas e quebras de linha
     new vm.Script(script);
   }, 'O script gerado com caracteres especiais deve ter sintaxe JavaScript válida');
 });
+
+test('extractFieldsFromRawText extrai corretamente cliente, produto e numero de chamado por rótulos', () => {
+  const { extractFieldsFromRawText } = require('../public/script_generator.js');
+  const text = `
+    Cliente: Hospital Santa Maria
+    Produto: NinaFlow
+    Chamado: #98432
+    O fluxo de atendimento trava ao clicar em prosseguir.
+  `;
+  const result = extractFieldsFromRawText(text);
+  assert.strictEqual(result.cliente, 'Hospital Santa Maria');
+  assert.strictEqual(result.produto, 'NinaFlow');
+  assert.strictEqual(result.numeroChamado, '98432');
+  assert.strictEqual(result.representante, 'Wander');
+});
+
+test('extractFieldsFromRawText extrai corretamente a partir de texto corrido em linguagem natural', () => {
+  const { extractFieldsFromRawText } = require('../public/script_generator.js');
+  const text = 'Identificado bug no chamado 45120 do cliente Unimed no ninachat ao enviar template.';
+  const result = extractFieldsFromRawText(text);
+  assert.strictEqual(result.cliente, 'Unimed');
+  assert.strictEqual(result.produto, 'ninachat');
+  assert.strictEqual(result.numeroChamado, '45120');
+  assert.strictEqual(result.representante, 'Wander');
+});
+
+test('extractFieldsFromRawText garante que o representante é sempre Wander mesmo sem outros campos', () => {
+  const { extractFieldsFromRawText } = require('../public/script_generator.js');
+  const result = extractFieldsFromRawText('Apenas uma explicação de erro qualquer sem metadados');
+  assert.strictEqual(result.cliente, undefined);
+  assert.strictEqual(result.produto, undefined);
+  assert.strictEqual(result.numeroChamado, undefined);
+  assert.strictEqual(result.representante, 'Wander');
+});
+
+test('extractFieldsFromRawText ignora palavras comuns como aberto/fechado para número de chamado', () => {
+  const { extractFieldsFromRawText } = require('../public/script_generator.js');
+  const result = extractFieldsFromRawText('Chamado aberto para verificação do sistema');
+  assert.strictEqual(result.numeroChamado, undefined);
+  assert.strictEqual(result.representante, 'Wander');
+});
+
+test('markdownToHtml converte negrito, itálico, código inline e blocos de código para HTML compatível com Jira', () => {
+  const { markdownToHtml } = require('../public/script_generator.js');
+  const md = '**Importante:** Ocorreu um erro no bloco `agendar_tarefa`.\n\n```json\n{"status": "erro"}\n```';
+  const html = markdownToHtml(md);
+
+  assert.ok(html.includes('<strong>Importante:</strong>'), 'Deve converter **texto** para <strong>');
+  assert.ok(html.includes('<code>agendar_tarefa</code>'), 'Deve converter `código` para <code>');
+  assert.ok(html.includes('<pre><code>'), 'Deve converter ```code``` para <pre><code>');
+  assert.ok(html.includes('{"status": "erro"}'));
+});
+
+test('markdownToHtml converte listas com marcadores e listas ordenadas para <ul> e <ol>', () => {
+  const { markdownToHtml } = require('../public/script_generator.js');
+  const md = 'Passos para reproduzir:\n1. Acessar o módulo\n2. Clicar em salvar\n\nItens afetados:\n- Fila\n- Mensagem';
+  const html = markdownToHtml(md);
+
+  assert.ok(html.includes('<ol>'), 'Deve conter <ol>');
+  assert.ok(html.includes('<li>Acessar o módulo</li>'));
+  assert.ok(html.includes('<li>Clicar em salvar</li>'));
+  assert.ok(html.includes('</ol>'));
+  assert.ok(html.includes('<ul>'), 'Deve conter <ul>');
+  assert.ok(html.includes('<li>Fila</li>'));
+  assert.ok(html.includes('<li>Mensagem</li>'));
+  assert.ok(html.includes('</ul>'));
+});
+
+test('htmlToMarkdown converte tags HTML de volta para Markdown limpo', () => {
+  const { htmlToMarkdown } = require('../public/script_generator.js');
+  const html = '<p><strong>Atenção:</strong> Ocorreu erro no <b>botão</b>.</p>' +
+               '<p>Use o método <code>fetch()</code>.</p>' +
+               '<pre><code>const a = 10;</code></pre>' +
+               '<ol><li>Passo um</li><li>Passo dois</li></ol>' +
+               '<ul><li>Item A</li><li>Item B</li></ul>';
+  const md = htmlToMarkdown(html);
+
+  assert.ok(md.includes('**Atenção:**'));
+  assert.ok(md.includes('**botão**'));
+  assert.ok(md.includes('`fetch()`'));
+  assert.ok(md.includes('```\nconst a = 10;\n```'));
+  assert.ok(md.includes('1. Passo um'));
+  assert.ok(md.includes('2. Passo dois'));
+  assert.ok(md.includes('- Item A'));
+  assert.ok(md.includes('- Item B'));
+});
+

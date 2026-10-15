@@ -6,6 +6,7 @@ let server;
 let baseUrl;
 
 test.before(async () => {
+  process.env.NODE_ENV = 'test';
   await new Promise((resolve) => {
     server = app.listen(0, () => {
       const port = server.address().port;
@@ -49,7 +50,7 @@ test('POST /api/open-jira deve retornar 200 e mensagem de sucesso para URL váli
   const response = await fetch(`${baseUrl}/api/open-jira`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url: 'https://jira.atlassian.com/browse/TEST-123' })
+    body: JSON.stringify({ url: 'https://example.com/chamado-teste' })
   });
 
   assert.strictEqual(response.status, 200);
