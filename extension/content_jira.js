@@ -24,18 +24,69 @@
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  // Disparo de sequência completa de ponteiro e mouse para simular clique real do usuário
+  function normalizeStr(s) {
+    if (!s) return '';
+    return s.toString()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[\s_\-\.\,]+/g, '');
+  }
+
+  // Disparo de sequência completa e realista de ponteiro e mouse para simular clique do usuário
   function dispatchMouseSequence(element) {
     if (!element) return;
-    const events = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
-    for (let i = 0; i < events.length; i++) {
-      element.dispatchEvent(new MouseEvent(events[i], {
+    try {
+      const rect = element.getBoundingClientRect ? element.getBoundingClientRect() : { left: 0, top: 0, width: 0, height: 0 };
+      const clientX = rect.left + Math.max(1, rect.width / 2);
+      const clientY = rect.top + Math.max(1, rect.height / 2);
+
+      const baseInit = {
         bubbles: true,
         cancelable: true,
         view: window,
-        button: 0,
-        buttons: 1
-      }));
+        clientX: clientX,
+        clientY: clientY,
+        screenX: clientX,
+        screenY: clientY,
+        button: 0
+      };
+
+      // 1. Hover
+      element.dispatchEvent(new MouseEvent('mouseenter', baseInit));
+      element.dispatchEvent(new MouseEvent('mouseover', baseInit));
+
+      // 2. Pointer down & mouse down (buttons: 1)
+      if (typeof window.PointerEvent === 'function') {
+        element.dispatchEvent(new PointerEvent('pointerdown', {
+          ...baseInit,
+          buttons: 1,
+          pointerId: 1,
+          pointerType: 'mouse',
+          isPrimary: true
+        }));
+      }
+      element.dispatchEvent(new MouseEvent('mousedown', { ...baseInit, buttons: 1 }));
+
+      // 3. Pointer up & mouse up & click (buttons: 0)
+      if (typeof window.PointerEvent === 'function') {
+        element.dispatchEvent(new PointerEvent('pointerup', {
+          ...baseInit,
+          buttons: 0,
+          pointerId: 1,
+          pointerType: 'mouse',
+          isPrimary: true
+        }));
+      }
+      element.dispatchEvent(new MouseEvent('mouseup', { ...baseInit, buttons: 0 }));
+      element.dispatchEvent(new MouseEvent('click', { ...baseInit, buttons: 0 }));
+
+      // 4. Invocação de método nativo se existir
+      if (typeof element.click === 'function') {
+        element.click();
+      }
+    } catch (e) {
+      console.warn('Erro ao disparar clique:', e);
     }
   }
 
@@ -187,6 +238,64 @@
     return false;
   }
 
+  // Aguarda assincronamente as opções aparecerem no DOM (polling ativo até 3.5s)
+  async function waitForMatchingOption(targetValue, maxWaitMs = 3500) {
+    const startTime = Date.now();
+    const normTarget = normalizeStr(targetValue);
+    const optSelectors = [
+      "[id*='-option-']",
+      "[role='option']",
+      "div[class*='-option']:not([class*='container']):not([class*='menu'])",
+      "div[class*='__option']:not([class*='container']):not([class*='menu'])",
+      "[role='menuitem']",
+      "li[role='option']",
+      "div[data-testid*='option']"
+    ];
+
+    let fallbackCandidate = null;
+
+    while (Date.now() - startTime < maxWaitMs) {
+      const allElements = Array.from(document.querySelectorAll(optSelectors.join(', ')));
+
+      for (const el of allElements) {
+        const rawText = (el.innerText || el.textContent || '').trim();
+        const normText = normalizeStr(rawText);
+
+        // Ignora opções desabilitadas, indicadores de carregamento ou "nenhuma opção"
+        if (el.getAttribute('aria-disabled') === 'true') continue;
+        if (normText.includes('carregando') || normText.includes('loading') || normText.includes('pesquisando') || normText.includes('searching')) continue;
+        if (normText.includes('nenhumaopcao') || normText.includes('nooptions') || normText.includes('nenhumresultado')) continue;
+        if (!normText) continue;
+
+        // Se encontrou texto válido, guarda como fallback caso não ache match exato
+        if (!fallbackCandidate) {
+          fallbackCandidate = el;
+        }
+
+        // Match exato ou início
+        if (normText === normTarget || normText.startsWith(normTarget) || normTarget.startsWith(normText)) {
+          console.log('🎯 [Jira Assistant] Match exato de opção encontrado:', rawText);
+          return el;
+        }
+
+        // Match por inclusão mútua
+        if (normText.includes(normTarget) || normTarget.includes(normText)) {
+          console.log('🎯 [Jira Assistant] Match por inclusão de opção encontrado:', rawText);
+          return el;
+        }
+      }
+
+      await wait(80);
+    }
+
+    if (fallbackCandidate) {
+      console.log('⚠️ [Jira Assistant] Usando primeira opção válida como fallback:', fallbackCandidate.innerText?.trim());
+      return fallbackCandidate;
+    }
+
+    return null;
+  }
+
   // 3. Fixação e clique real em seletores React (Produto, Prioridade, Cliente, Representante)
   async function selectReactOption(labelName, targetValue) {
     if (!targetValue || targetValue === '-') return false;
@@ -198,7 +307,7 @@
       const trigger = container.querySelector("[role='combobox'], [class*='control'], [class*='select__control'], button");
       const input = container.querySelector("input:not([type='hidden'])");
 
-      // Abre o dropdown
+      // 1. Abre o dropdown clicando no trigger ou focando o input
       if (trigger) {
         trigger.focus?.();
         dispatchMouseSequence(trigger);
@@ -207,9 +316,9 @@
         dispatchMouseSequence(input);
       }
 
-      await wait(300);
+      await wait(250);
 
-      // Digita o termo no input de busca para filtrar as opções
+      // 2. Digita o termo no input de busca para filtrar as opções
       if (input) {
         input.focus();
         const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
@@ -219,39 +328,36 @@
         input.dispatchEvent(new Event('input', { bubbles: true }));
         input.dispatchEvent(new Event('change', { bubbles: true }));
         input.dispatchEvent(new KeyboardEvent('keydown', { key: targetValue[0] || 'a', bubbles: true }));
+        input.dispatchEvent(new KeyboardEvent('keyup', { key: targetValue[0] || 'a', bubbles: true }));
       }
 
-      await wait(500);
+      // 3. Aguarda ativamente o Jira buscar e renderizar a opção no DOM (polling ativo até 3.5s)
+      const matchingOption = await waitForMatchingOption(targetValue, 3500);
 
-      // Busca a opção em todo o DOM (incluindo o Portal no <body> do React)
-      const tBusca = targetValue.toLowerCase().replace(/[\s_-]+/g, '');
-      const optSelectors = [
-        "[id*='react-select-'][id*='-option-']",
-        "[role='option']",
-        "[role='menuitem']",
-        "div[class*='-option']",
-        "div[class*='option']",
-        "div[id*='react-select']",
-        "li[role='option']"
-      ];
+      if (matchingOption) {
+        // Encontra o container da opção caso o elemento seja um span/label interno
+        const optionContainer = matchingOption.closest("[role='option'], [id*='-option-'], [class*='-option'], [class*='__option']") || matchingOption;
 
-      const allOptions = Array.from(document.querySelectorAll(optSelectors.join(', ')));
-      const matching = allOptions.find(opt => {
-        const txt = (opt.innerText || opt.textContent || '').trim().toLowerCase().replace(/[\s_-]+/g, '');
-        return txt === tBusca || txt.includes(tBusca) || tBusca.includes(txt);
-      }) || allOptions[0];
+        // Rola até o elemento
+        optionContainer.scrollIntoView?.({ block: 'nearest', behavior: 'instant' });
+        await wait(60);
 
-      if (matching) {
-        matching.scrollIntoView?.({ block: 'nearest' });
-        dispatchMouseSequence(matching);
-        console.log('✔ [Jira Assistant] Opção clicada com sucesso:', labelName, '=>', matching.innerText.trim());
-      } else if (input) {
-        // Fallback por tecla Enter
-        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, which: 13, bubbles: true }));
-        input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+        // Executa clique realista em ambos os níveis (container e elemento interno)
+        dispatchMouseSequence(matchingOption);
+        if (optionContainer !== matchingOption) {
+          dispatchMouseSequence(optionContainer);
+        }
+
+        console.log('✔ [Jira Assistant] Opção clicada com sucesso:', labelName, '=>', matchingOption.innerText?.trim());
       }
 
-      // Notifica o inpage_fiber para fallback de React Props
+      // 4. Teclado como garantia e confirmação (Enter e Tab no input)
+      if (input) {
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }));
+        input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }));
+      }
+
+      // 5. Notifica o script MAIN inpage_fiber para invocar SyntheticEvents do React
       window.postMessage({
         source: 'JIRA_ASSISTANT_CONTENT',
         action: 'SELECT_REACT_OPTION',
@@ -259,7 +365,19 @@
         searchValue: targetValue
       }, '*');
 
-      await wait(350);
+      await wait(200);
+
+      // 6. Verificação: se o menu ainda estiver aberto, envia ArrowDown + Enter
+      const isMenuStillOpen = document.querySelector("[role='listbox'], div[class*='-menu'], div[data-ds--menu--container]");
+      if (isMenuStillOpen && input) {
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', code: 'ArrowDown', keyCode: 40, which: 40, bubbles: true }));
+        input.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowDown', code: 'ArrowDown', keyCode: 40, which: 40, bubbles: true }));
+        await wait(50);
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+        input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+      }
+
+      await wait(250);
       return true;
     } catch (e) {
       console.warn('Erro ao selecionar opção React:', labelName, e);

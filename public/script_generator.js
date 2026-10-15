@@ -294,16 +294,33 @@ function generateJiraScript(options = {}) {
     });
   }
 
-  // Simula o clique real do mouse exigido pelo React-Select
+  // Simula o clique real do mouse e ponteiro exigido pelo React-Select
   function simularCliqueReal(elemento) {
     if (!elemento) return;
-    var eventos = ["pointerdown", "mousedown", "pointerup", "mouseup", "click"];
-    for (var i = 0; i < eventos.length; i++) {
-      elemento.dispatchEvent(new MouseEvent(eventos[i], {
-        bubbles: true,
-        cancelable: true,
-        view: window
-      }));
+    try {
+      var rect = elemento.getBoundingClientRect ? elemento.getBoundingClientRect() : { left: 0, top: 0, width: 0, height: 0 };
+      var cx = rect.left + Math.max(1, rect.width / 2);
+      var cy = rect.top + Math.max(1, rect.height / 2);
+      var base = { bubbles: true, cancelable: true, view: window, clientX: cx, clientY: cy, button: 0 };
+
+      elemento.dispatchEvent(new MouseEvent("mouseenter", base));
+      elemento.dispatchEvent(new MouseEvent("mouseover", base));
+
+      var eventos = ["pointerdown", "mousedown", "pointerup", "mouseup", "click"];
+      for (var i = 0; i < eventos.length; i++) {
+        var ev = eventos[i];
+        var isDown = (ev === "pointerdown" || ev === "mousedown");
+        var opts = Object.assign({}, base, { buttons: isDown ? 1 : 0 });
+        if (ev.indexOf("pointer") === 0 && typeof window.PointerEvent === "function") {
+          elemento.dispatchEvent(new PointerEvent(ev, Object.assign({}, opts, { pointerId: 1, pointerType: "mouse", isPrimary: true })));
+        } else {
+          elemento.dispatchEvent(new MouseEvent(ev, opts));
+        }
+      }
+
+      if (typeof elemento.click === "function") elemento.click();
+    } catch (e) {
+      console.warn("Erro ao simular clique:", e);
     }
   }
 
@@ -382,8 +399,9 @@ function generateJiraScript(options = {}) {
     }
   }
 
-  // 3. Seletores React com mousedown real
+  // 3. Seletores React com espera ativa e clique real
   async function fixarSeletor(chave, termoBusca) {
+    if (!termoBusca || termoBusca === "-") return;
     try {
       var lbl = acharLabel(chave);
       var container = acharContainer(lbl);
@@ -392,7 +410,8 @@ function generateJiraScript(options = {}) {
         container.querySelector("[role='combobox'], button, [class*='control']") : null;
 
       if (trigger) simularCliqueReal(trigger);
-      await wait(300);
+      else if (input) simularCliqueReal(input);
+      await wait(250);
 
       if (input) {
         input.focus();
@@ -403,25 +422,46 @@ function generateJiraScript(options = {}) {
         else input.value = termoBusca;
         input.dispatchEvent(new Event("input", { bubbles: true }));
         input.dispatchEvent(new Event("change", { bubbles: true }));
-        await wait(600);
+        input.dispatchEvent(new KeyboardEvent("keydown", { key: termoBusca[0] || "a", bubbles: true }));
+        input.dispatchEvent(new KeyboardEvent("keyup", { key: termoBusca[0] || "a", bubbles: true }));
 
-        var tBusca = termoBusca.toLowerCase().replace(/[\\s_-]+/g, "");
-        var selOpt = "[role='option'], [role='menuitem'], div[class*='option'], div[id*='react-select'], span, li";
-        var opcoes = Array.from(document.querySelectorAll(selOpt)).filter(function(el) {
-          var txt = (el.innerText || "").trim().toLowerCase().replace(/[\\s_-]+/g, "");
-          return txt && (txt === tBusca || txt.includes(tBusca) || tBusca.includes(txt));
-        });
+        // Polling ativo aguardando a opção ser renderizada após a busca
+        var tBusca = termoBusca.toString().toLowerCase().replace(/[\\s_-]+/g, "");
+        var selOpt = "[id*='-option-'], [role='option'], div[class*='-option']:not([class*='container']), [role='menuitem'], li[role='option']";
+        var opcaoEncontrada = null;
+        var inicio = Date.now();
 
-        if (opcoes.length > 0) {
-          simularCliqueReal(opcoes[0]);
-          console.log("✔ Fixado: " + chave + " -> " + opcoes[0].innerText.trim());
-        } else {
-          input.dispatchEvent(new KeyboardEvent("keydown", {
-            key: "Enter", keyCode: 13, which: 13, bubbles: true
-          }));
+        while (Date.now() - inicio < 3500) {
+          var opcoes = Array.from(document.querySelectorAll(selOpt)).filter(function(el) {
+            var raw = (el.innerText || el.textContent || "").trim();
+            var txt = raw.toLowerCase().replace(/[\\s_-]+/g, "");
+            if (el.getAttribute("aria-disabled") === "true") return false;
+            if (txt.includes("carregando") || txt.includes("loading") || txt.includes("pesquisando")) return false;
+            if (txt.includes("nenhumaopcao") || txt.includes("nooptions")) return false;
+            return txt && (txt === tBusca || txt.includes(tBusca) || tBusca.includes(txt));
+          });
+
+          if (opcoes.length > 0) {
+            opcaoEncontrada = opcoes[0];
+            break;
+          }
+          await wait(80);
         }
+
+        if (opcaoEncontrada) {
+          var optContainer = opcaoEncontrada.closest("[role='option'], [id*='-option-'], [class*='-option']") || opcaoEncontrada;
+          optContainer.scrollIntoView?.({ block: "nearest", behavior: "instant" });
+          await wait(50);
+          simularCliqueReal(opcaoEncontrada);
+          if (optContainer !== opcaoEncontrada) simularCliqueReal(optContainer);
+          console.log("✔ Fixado: " + chave + " -> " + opcaoEncontrada.innerText.trim());
+        }
+
+        // Teclado Enter como confirmação
+        input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
+        input.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
       }
-      await wait(400);
+      await wait(300);
     } catch (e) {
       console.warn("Erro ao fixar " + chave, e);
     }

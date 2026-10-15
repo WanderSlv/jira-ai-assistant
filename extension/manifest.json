@@ -30,6 +30,13 @@
       "run_at": "document_idle"
     },
     {
+      "matches": ["https://*.atlassian.net/*"],
+      "all_frames": true,
+      "js": ["inpage_fiber.js"],
+      "world": "MAIN",
+      "run_at": "document_idle"
+    },
+    {
       "matches": [
         "http://localhost:3000/*",
         "http://127.0.0.1:3000/*"
