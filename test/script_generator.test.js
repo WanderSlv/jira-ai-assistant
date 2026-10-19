@@ -162,3 +162,40 @@ test('htmlToMarkdown converte tags HTML de volta para Markdown limpo', () => {
   assert.ok(md.includes('- Item B'));
 });
 
+test('markdownToHtml converte sintaxe de imagem ![alt](url) para tag <img>', () => {
+  const { markdownToHtml } = require('../public/script_generator.js');
+  const md = 'Visualização do erro na tela:\n![print_erro.png](data:image/png;base64,iVBORw0KGgo=)';
+  const html = markdownToHtml(md);
+
+  assert.ok(html.includes('<img src="data:image/png;base64,iVBORw0KGgo=" alt="print_erro.png"'));
+});
+
+test('htmlToMarkdown converte tags <img> de volta para ![alt](url)', () => {
+  const { htmlToMarkdown } = require('../public/script_generator.js');
+  const html = '<p>Print de evidência:</p><p><img src="data:image/png;base64,iVBORw0KGgo=" alt="evidencia.png" /></p>';
+  const md = htmlToMarkdown(html);
+
+  assert.ok(md.includes('![evidencia.png](data:image/png;base64,iVBORw0KGgo=)'));
+});
+
+test('generateJiraScript com array de imagens inclui anexarImagensNoJira e valida no V8', () => {
+  const { generateJiraScript } = require('../public/script_generator.js');
+  const script = generateJiraScript({
+    titulo: '[ninachat] - Erro de renderização',
+    descricao: 'Contexto do chamado',
+    fields: { Cliente: 'Nina', Produto: 'ninachat', Prioridade: 'Baixo', Representante: 'Wander', NumeroChamado: '-' },
+    images: [
+      { name: 'print_modal.png', dataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==' }
+    ]
+  });
+
+  assert.ok(script.includes('anexarImagensNoJira'));
+  assert.ok(script.includes('print_modal.png'));
+  assert.ok(script.includes('listaEvidencias'));
+
+  // Validação no V8
+  assert.doesNotThrow(() => {
+    new vm.Script(script);
+  });
+});
+

@@ -24,7 +24,7 @@
   - **Google Gemini**: Suporte nativo a `gemini-3.8-flash`, `gemini-1.5-flash`, `gemini-1.5-pro` ou modelos customizados com teste de chave integrado.
   - **Ollama Local**: Suporte a modelos locais offline (ex: `llama3`, `mistral`, `deepseek-r1`).
   - **Fallback Inteligente**: Funciona perfeitamente mesmo sem nenhuma chave de API, extraindo metadados e formatando o card com regras locais determinísticas.
-- **Upload e Análise Multimodal de Imagens**: Arraste, anexe ou cole com `Ctrl + V` prints de tela e logs de erro para enriquecer o contexto da IA.
+- **Upload, Integração e Anexo de Imagens no Card**: Arraste, anexe ou cole com `Ctrl + V` prints de tela e evidências visuais. As imagens são analisadas pela IA multimodal, integradas à estrutura do card (seção `📸 Evidências & Prints`, miniatura e inserção no editor) e anexadas automaticamente ao chamado no Jira pelo script e pela extensão do Chrome.
 - **Extensão do Chrome Manifest V3**:
   - Injeção direta e compatibilidade com modais, páginas normais e portais Jira Service Management (`/form/34`).
   - **Polling Assíncrono:** Aguarda ativamente o Jira buscar na API e renderizar a opção desejada na tela, disparando a sequência real de eventos de mouse (`PointerEvent` + `MouseEvent` + `Enter`).

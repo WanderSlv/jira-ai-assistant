@@ -182,13 +182,14 @@ function formatDescricao(desc) {
   return String(desc);
 }
 
-function buildNinaPrompt(type, rawText, fields) {
+function buildNinaPrompt(type, rawText, fields, images = []) {
   const produto = (fields && fields.Produto) || 'ninachat';
   const cliente = (fields && fields.Cliente) || 'Nina';
   const prioridade = (fields && fields.Prioridade) || 'Baixo';
   const numeroChamado = (fields && fields.NumeroChamado) || '-';
+  const hasImages = Array.isArray(images) && images.length > 0;
 
-    const extractionPrompt = `
+  const extractionPrompt = `
 IMPORTANTE SOBRE CAMPOS:
 Analise cuidadosamente a explicação bruta do usuário e eventuais imagens/prints de evidência fornecidos. Se você identificar:
 - Produto afetado (ex: ninachat, ninaflow, ninaforms, portal, whatsapp, etc.)
@@ -201,7 +202,7 @@ REGRAS DE FORMATAÇÃO DA DESCRIÇÃO (Markdown Rico):
 - Destaque termos importantes, botões, status e mensagens de erro em **negrito** (ex: **Erro 500**, clique em **Salvar**).
 - Para logs técnicos, JSON, payloads, requisições de rede ou trechos de código, utilize blocos de código com crases triplas (\`\`\`json ou \`\`\`bash).
 - Para endpoints, URLs, variáveis ou IDs, use código inline com crase simples (\`exemplo\`).
-- Se houver prints ou imagens de evidência fornecidos, analise os textos, mensagens na tela e detalhes visuais para enriquecer o contexto e a análise técnica.
+- Se houver prints ou imagens de evidência fornecidos (${hasImages ? `${images.length} print(s) anexado(s)` : 'se houver'}), analise os textos, mensagens na tela e detalhes visuais. Inclua obrigatoriamente a seção "📸 Evidências & Prints" descrevendo com precisão técnica o que é comprovado pelas imagens anexadas ao card.
 `;
 
   if (type === 'feature') {
@@ -224,7 +225,7 @@ ${extractionPrompt}
 Responda ESTRITAMENTE em formato JSON com:
 {
   "titulo": "[Produto] - Resumo claro e objetivo da funcionalidade",
-  "descricao": "🎯 Objetivo / Motivação\\n(Explicação clara do porquê da funcionalidade e do valor para o usuário/cliente)\\n\\n📋 Especificação da Feature\\n(Detalhamento do fluxo, regras de negócio e como deve se comportar)\\n\\n✅ Critérios de Aceite\\n- [ ] Critério 1\\n- [ ] Critério 2\\n\\n🧑‍💻 Observações Técnicas\\n(Impactos na API, frontend ou integrações)",
+  "descricao": "🎯 Objetivo / Motivação\\n(Explicação clara do porquê da funcionalidade e do valor para o usuário/cliente)\\n\\n📋 Especificação da Feature\\n(Detalhamento do fluxo, regras de negócio e como deve se comportar)\\n\\n✅ Critérios de Aceite\\n- [ ] Critério 1\\n- [ ] Critério 2\\n\\n📸 Evidências & Referências Visuais\\n(Prints e referências visuais anexadas ao card)\\n\\n🧑‍💻 Observações Técnicas\\n(Impactos na API, frontend ou integrações)",
   "campos": {
     "cliente": "${cliente}",
     "produto": "${produto}",
@@ -257,7 +258,7 @@ ${extractionPrompt}
 Responda ESTRITAMENTE em formato JSON com:
 {
   "titulo": "[Produto] - Resumo claro e objetivo do problema",
-  "descricao": "📜 História & Contexto\\n(Explique o cenário do bug, o objetivo da ação do usuário e o impacto negativo)\\n\\n🪲 Reprodução do bug\\n1. Passo um (ação inicial no sistema)\\n2. Passo dois (ação do usuário)\\n3. Passo três (ocorrência da falha)\\n\\n❌ Comportamento Atual\\n(O que aconteceu de errado)\\n\\n✅ Comportamento Esperado\\n(O que deveria ter acontecido)\\n\\n🧑‍💻 Análise Técnica\\n(Hipóteses técnicas, comportamento de interface, requisições de rede ou validações)",
+  "descricao": "📜 História & Contexto\\n(Explique o cenário do bug, o objetivo da ação do usuário e o impacto negativo)\\n\\n🪲 Reprodução do bug\\n1. Passo um (ação inicial no sistema)\\n2. Passo dois (ação do usuário)\\n3. Passo três (ocorrência da falha)\\n\\n❌ Comportamento Atual\\n(O que aconteceu de errado)\\n\\n✅ Comportamento Esperado\\n(O que deveria ter acontecido)\\n\\n📸 Evidências & Prints\\n(Descreva objetivamente os prints/evidências visuais anexados e o que eles comprovam)\\n\\n🧑‍💻 Análise Técnica\\n(Hipóteses técnicas, comportamento de interface, requisições de rede ou validações)",
   "campos": {
     "cliente": "${cliente}",
     "produto": "${produto}",
@@ -397,10 +398,14 @@ app.post('/api/enhance', async (req, res) => {
     const initialNum = extracted.numeroChamado || (fields && fields.NumeroChamado) || '-';
 
     // Em ambiente de teste automatizado sem chave, usa fallback rápido imediato com dados extraídos
+    const testEvidenceText = (images && images.length > 0)
+      ? `\n\n📸 Evidências & Prints\n- ${images.length} print(s) anexado(s) ao chamado para análise visual.`
+      : '';
+
     if (process.env.NODE_ENV === 'test' && !process.env.GEMINI_API_KEY && !customApiKey) {
       return res.json({
         titulo: `[${initialProd}] - ${rawText.slice(0, 50).trim()}...`,
-        descricao: `Contexto:\n${rawText}\n\nProduto afetado: ${initialProd}\nCliente: ${initialCli}`,
+        descricao: `Contexto:\n${rawText}\n\nProduto afetado: ${initialProd}\nCliente: ${initialCli}${testEvidenceText}`,
         fields: {
           Cliente: initialCli,
           Produto: initialProd,
@@ -426,7 +431,7 @@ app.post('/api/enhance', async (req, res) => {
       NumeroChamado: initialNum
     };
 
-    const prompt = buildNinaPrompt(type, rawText, currentFields);
+    const prompt = buildNinaPrompt(type, rawText, currentFields, images);
     const apiKey = (customApiKey && customApiKey.trim()) || process.env.GEMINI_API_KEY;
     const model = (customModel && customModel.trim()) || process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 
@@ -436,6 +441,9 @@ app.post('/api/enhance', async (req, res) => {
         console.log(`🤖 Processando com Google Gemini (${model})...`);
         const result = await callGemini(apiKey, prompt, model, images);
         if (result.titulo && result.descricao) {
+          if (images && images.length > 0 && !result.descricao.includes('Evidência') && !result.descricao.includes('Evidencias') && !result.descricao.includes('📸')) {
+            result.descricao += `\n\n📸 Evidências & Prints\n- ${images.length} print(s) de tela anexado(s) ao card para comprovação visual.`;
+          }
           const resCampos = result.campos || {};
           const finalFields = {
             Cliente: resolveFieldValue(extracted.cliente, resCampos.cliente || resCampos.Cliente, initialCli),
@@ -466,6 +474,9 @@ app.post('/api/enhance', async (req, res) => {
       console.log('🤖 Processando com Ollama local (qwen2.5-coder)...');
       const result = await callOllama(prompt);
       if (result.titulo && result.descricao) {
+        if (images && images.length > 0 && !result.descricao.includes('Evidência') && !result.descricao.includes('Evidencias') && !result.descricao.includes('📸')) {
+          result.descricao += `\n\n📸 Evidências & Prints\n- ${images.length} print(s) de tela anexado(s) ao card para comprovação visual.`;
+        }
         const resCampos = result.campos || {};
         const finalFields = {
           Cliente: resolveFieldValue(extracted.cliente, resCampos.cliente || resCampos.Cliente, initialCli),
@@ -502,9 +513,13 @@ app.post('/api/enhance', async (req, res) => {
       NumeroChamado: initialNum
     };
 
+    const fallbackEvidenceText = (images && images.length > 0)
+      ? `\n\n📸 Evidências & Prints\n- ${images.length} print(s) de evidência anexado(s) ao chamado para comprovação e análise visual do erro.`
+      : '';
+
     return res.json({
       titulo: `[${initialProd}] - ${rawText.slice(0, 50).trim()}...`,
-      descricao: `📜 História & Contexto\nIdentificado durante a utilização do ${initialProd}.\n${rawText}\n\n🪲 Reprodução do bug\n1. Acessar o módulo ${initialProd}\n2. Executar a ação: ${rawText.slice(0, 80)}\n3. Observar a ocorrência do erro\n\n❌ Comportamento Atual\nO sistema apresentou falha durante a execução: "${rawText.slice(0, 120)}..."\n\n✅ Comportamento Esperado\nO sistema deve permitir a operação com sucesso sem apagar dados ou gerar erros inesperados.\n\n🧑‍💻 Análise Técnica\nProduto afetado: ${initialProd}\nCliente: ${initialCli}\nPrioridade: ${(fields && fields.Prioridade) || 'Baixo'}`,
+      descricao: `📜 História & Contexto\nIdentificado durante a utilização do ${initialProd}.\n${rawText}\n\n🪲 Reprodução do bug\n1. Acessar o módulo ${initialProd}\n2. Executar a ação: ${rawText.slice(0, 80)}\n3. Observar a ocorrência do erro\n\n❌ Comportamento Atual\nO sistema apresentou falha durante a execução: "${rawText.slice(0, 120)}..."\n\n✅ Comportamento Esperado\nO sistema deve permitir a operação com sucesso sem apagar dados ou gerar erros inesperados.${fallbackEvidenceText}\n\n🧑‍💻 Análise Técnica\nProduto afetado: ${initialProd}\nCliente: ${initialCli}\nPrioridade: ${(fields && fields.Prioridade) || 'Baixo'}`,
       fields: finalFields,
       detectedFields: {
         Cliente: extracted.cliente || null,

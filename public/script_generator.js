@@ -138,6 +138,11 @@ function markdownToHtml(md) {
   html = html.replace(/\*([^*\n]+)\*/g, "<em>$1</em>");
   html = html.replace(/_([^_\n]+)_/g, "<em>$1</em>");
 
+  // Imagens Markdown: ![alt](url)
+  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, function(_, alt, src) {
+    return '<img src="' + src + '" alt="' + (alt || 'print') + '" class="evidence-card-img rounded-lg max-h-72 my-2 border border-slate-700 shadow-md" style="max-width:100%; border-radius:8px; margin:8px 0;">';
+  });
+
   var lines = html.split("\n");
   var formatted = [];
   var inList = false;
@@ -145,7 +150,7 @@ function markdownToHtml(md) {
 
   for (var i = 0; i < lines.length; i++) {
     var line = lines[i];
-    if (line.includes("<pre>") || line.includes("</pre>")) {
+    if (line.includes("<pre>") || line.includes("</pre>") || line.includes("<img")) {
       formatted.push(line);
       continue;
     }
@@ -231,6 +236,17 @@ function htmlToMarkdown(html) {
     return "\n" + listMd + "\n";
   });
 
+  // Imagens: <img ... src="..." ...> -> ![alt](src)
+  md = md.replace(/<img[^>]*\s+src=["']([^"']+)["'][^>]*\s+alt=["']([^"']*)["'][^>]*>/gi, function(_, src, alt) {
+    return "![" + (alt || "print") + "](" + src + ")";
+  });
+  md = md.replace(/<img[^>]*\s+alt=["']([^"']*)["'][^>]*\s+src=["']([^"']+)["'][^>]*>/gi, function(_, alt, src) {
+    return "![" + (alt || "print") + "](" + src + ")";
+  });
+  md = md.replace(/<img[^>]*\s+src=["']([^"']+)["'][^>]*>/gi, function(_, src) {
+    return "![print](" + src + ")";
+  });
+
   // Quebras de linha e blocos de parágrafo
   md = md.replace(/<br\s*\/?>/gi, "\n");
   md = md.replace(/<\/p>/gi, "\n\n");
@@ -268,7 +284,8 @@ function generateJiraScript(options = {}) {
   const {
     titulo = '',
     descricao = '',
-    fields = {}
+    fields = {},
+    images = []
   } = options;
 
   const cliente = fields.Cliente || 'Nina';
@@ -284,6 +301,14 @@ function generateJiraScript(options = {}) {
   const jsonProduto = JSON.stringify(produto);
   const jsonPrioridade = JSON.stringify(prioridade);
   const jsonRepresentante = JSON.stringify(representante);
+
+  const sanitizedImages = (Array.isArray(images) ? images : []).map(function(img) {
+    if (typeof img === 'string') return { name: 'print.png', dataUrl: img };
+    return { name: img.name || 'print.png', dataUrl: img.dataUrl || '' };
+  }).filter(function(img) {
+    return Boolean(img.dataUrl);
+  });
+  const jsonImagens = JSON.stringify(sanitizedImages);
 
   return `(async function() {
   console.log("=== PREENCHIMENTO AUTOMÁTICO JIRA ===");
@@ -533,6 +558,94 @@ function generateJiraScript(options = {}) {
   await fixarSeletor(["Prioridade", "Priority"], ${jsonPrioridade});
   await fixarSeletor(["Cliente", "Client", "Empresa"], ${jsonCliente});
   await fixarSeletor(["Representante do Cliente", "Representante do cliente", "Representante", "Representative"], ${jsonRepresentante});
+
+  await wait(250);
+
+  // 4. Anexar imagens de evidência ao Jira (via input file, dropzone e editor)
+  async function anexarImagensNoJira(imgs) {
+    if (!Array.isArray(imgs) || imgs.length === 0) return;
+    try {
+      console.log("📸 [Jira] Anexando " + imgs.length + " evidência(s)...");
+      var files = [];
+      for (var i = 0; i < imgs.length; i++) {
+        var item = imgs[i];
+        var dUrl = item.dataUrl || "";
+        var fname = item.name || ("print_" + (i + 1) + ".png");
+        if (!dUrl || dUrl.indexOf(",") === -1) continue;
+        try {
+          var partes = dUrl.split(",");
+          var mimeM = partes[0].match(/:(.*?);/);
+          var mime = mimeM ? mimeM[1] : "image/png";
+          var bstr = atob(partes[1]);
+          var n = bstr.length;
+          var u8arr = new Uint8Array(n);
+          while (n--) {
+            u8arr[n] = bstr.charCodeAt(n);
+          }
+          files.push(new File([u8arr], fname, { type: mime }));
+        } catch (decErr) {
+          console.warn("Erro ao decodificar imagem:", fname, decErr);
+        }
+      }
+
+      if (files.length === 0) return;
+
+      var dt = new DataTransfer();
+      for (var f = 0; f < files.length; f++) {
+        dt.items.add(files[f]);
+      }
+
+      // Injeta no input[type='file'] se houver
+      var fileInputs = Array.from(document.querySelectorAll("input[type='file']"));
+      var anexoInput = fileInputs.find(function(inp) {
+        var n = (inp.name || inp.id || inp.getAttribute("data-testid") || "").toLowerCase();
+        return n.includes("attach") || n.includes("file") || n.includes("media") || inp.multiple;
+      }) || fileInputs[0];
+
+      if (anexoInput) {
+        try {
+          anexoInput.files = dt.files;
+          anexoInput.dispatchEvent(new Event("change", { bubbles: true }));
+          anexoInput.dispatchEvent(new Event("input", { bubbles: true }));
+          console.log("✔ [Jira] Arquivos vinculados ao input de anexo");
+        } catch (inpErr) {
+          console.warn("Aviso ao definir input de arquivos:", inpErr);
+        }
+      }
+
+      // Dispara evento drop em dropzones
+      var dropzones = Array.from(document.querySelectorAll("[data-testid*='attachment'], [data-testid*='media-picker'], [data-testid*='drop'], .issue-drop-zone, .dropzone, [class*='attachment'], [class*='drop-zone']"));
+      for (var d = 0; d < dropzones.length; d++) {
+        try {
+          var dz = dropzones[d];
+          dz.dispatchEvent(new DragEvent("dragenter", { bubbles: true, cancelable: true, dataTransfer: dt }));
+          dz.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: dt }));
+          dz.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: dt }));
+        } catch (dzErr) {}
+      }
+
+      // Dispara paste de imagem no editor ProseMirror
+      try {
+        var ed = document.querySelector(".ProseMirror[contenteditable='true'], [contenteditable='true']");
+        if (ed) {
+          var pasteEv = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt });
+          ed.dispatchEvent(pasteEv);
+          console.log("✔ [Jira] Evento paste de imagem enviado ao editor");
+        }
+      } catch (pErr) {}
+
+      console.log("✔ [Jira] Evidências anexadas com sucesso ao card!");
+    } catch (e) {
+      console.warn("Erro ao anexar imagens:", e);
+    }
+  }
+
+  // 5. Anexação de prints e evidências ao chamado
+  var listaEvidencias = ${jsonImagens};
+  if (listaEvidencias && listaEvidencias.length > 0) {
+    await wait(250);
+    await anexarImagensNoJira(listaEvidencias);
+  }
 
   console.log("=== PREENCHIMENTO CONCLUÍDO (Pronto para revisão - NUNCA clica em Enviar) ===");
 })();`;

@@ -203,6 +203,11 @@
     html = html.replace(/\*([^*\n]+)\*/g, "<em>$1</em>");
     html = html.replace(/_([^_\n]+)_/g, "<em>$1</em>");
 
+    // Imagens Markdown: ![alt](url)
+    html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, function(_, alt, src) {
+      return '<img src="' + src + '" alt="' + (alt || 'print') + '" class="evidence-card-img" style="max-width:100%; border-radius:8px; margin:8px 0;">';
+    });
+
     var lines = html.split("\n");
     var formatted = [];
     var inList = false;
@@ -210,7 +215,7 @@
 
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i];
-      if (line.includes("<pre>") || line.includes("</pre>")) {
+      if (line.includes("<pre>") || line.includes("</pre>") || line.includes("<img")) {
         formatted.push(line);
         continue;
       }
@@ -450,6 +455,93 @@
     }
   }
 
+  // 3. Anexação de imagens de evidência ao chamado no Jira
+  async function attachImagesToJira(images) {
+    if (!Array.isArray(images) || images.length === 0) return 0;
+    try {
+      console.log(`📸 [Jira Assistant] Processando ${images.length} imagem(ns) de evidência...`);
+      const files = [];
+      for (let i = 0; i < images.length; i++) {
+        const item = images[i];
+        const dataUrl = typeof item === 'string' ? item : (item.dataUrl || '');
+        const fname = (typeof item === 'object' && item.name) ? item.name : `evidencia_${i + 1}.png`;
+        if (!dataUrl || !dataUrl.includes(',')) continue;
+
+        try {
+          const parts = dataUrl.split(',');
+          const mimeMatch = parts[0].match(/:(.*?);/);
+          const mime = mimeMatch ? mimeMatch[1] : 'image/png';
+          const byteCharacters = atob(parts[1]);
+          const byteArrays = new Uint8Array(byteCharacters.length);
+          for (let j = 0; j < byteCharacters.length; j++) {
+            byteArrays[j] = byteCharacters.charCodeAt(j);
+          }
+          files.push(new File([byteArrays], fname, { type: mime }));
+        } catch (err) {
+          console.warn('Erro ao decodificar imagem:', fname, err);
+        }
+      }
+
+      if (files.length === 0) return 0;
+
+      const dt = new DataTransfer();
+      files.forEach(f => dt.items.add(f));
+
+      let attached = false;
+
+      // A. Injeta no input[type='file'] de anexo do Jira
+      const fileInputs = Array.from(document.querySelectorAll("input[type='file']"));
+      const attachmentInput = fileInputs.find(inp => {
+        const name = (inp.name || inp.id || inp.getAttribute('data-testid') || '').toLowerCase();
+        return name.includes('attach') || name.includes('file') || name.includes('media') || inp.multiple;
+      }) || fileInputs[0];
+
+      if (attachmentInput) {
+        try {
+          attachmentInput.files = dt.files;
+          attachmentInput.dispatchEvent(new Event('change', { bubbles: true }));
+          attachmentInput.dispatchEvent(new Event('input', { bubbles: true }));
+          console.log('✔ [Jira Assistant] Arquivos anexados ao input[type=file]');
+          attached = true;
+        } catch (e) {
+          console.warn('Erro ao definir input de arquivo:', e);
+        }
+      }
+
+      // B. Dispara drop em dropzones de anexo do Jira
+      const dropzones = Array.from(document.querySelectorAll("[data-testid*='attachment'], [data-testid*='media-picker'], [data-testid*='drop'], .issue-drop-zone, .dropzone, [class*='attachment'], [class*='drop-zone']"));
+      for (const dz of dropzones) {
+        try {
+          dz.dispatchEvent(new DragEvent('dragenter', { bubbles: true, cancelable: true, dataTransfer: dt }));
+          dz.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }));
+          dz.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+          attached = true;
+        } catch (e) {}
+      }
+
+      // C. Dispara evento de paste no editor ProseMirror da Descrição (Jira intercepta e anexa)
+      try {
+        const editor = document.querySelector(".ProseMirror[contenteditable='true'], [contenteditable='true']");
+        if (editor) {
+          const pasteEvent = new ClipboardEvent('paste', {
+            bubbles: true,
+            cancelable: true,
+            clipboardData: dt
+          });
+          editor.dispatchEvent(pasteEvent);
+          console.log('✔ [Jira Assistant] Evento paste de evidência enviado ao editor ProseMirror');
+          attached = true;
+        }
+      } catch (e) {}
+
+      console.log('✔ [Jira Assistant] Evidências anexadas com sucesso!');
+      return files.length;
+    } catch (e) {
+      console.warn('Erro ao anexar imagens:', e);
+      return 0;
+    }
+  }
+
   // Execução do preenchimento completo
   async function executeFormFill(ticketData) {
     if (!ticketData) {
@@ -467,6 +559,7 @@
     const prioridade = fields.Prioridade || 'Baixo';
     const representante = 'Wander'; // O representante sempre vai ser Wander
     const numeroChamado = fields.NumeroChamado || '-';
+    const images = ticketData.images || [];
 
     // 1. Textos
     fillTextInput(['Título', 'Summary', 'Titulo', 'Assunto'], titulo);
@@ -497,7 +590,17 @@
       fillTextInput(reprAliases, representante);
     }
 
-    showFloatingToast('✔ Chamado preenchido com sucesso! Pronto para revisão.', '🎉');
+    // 3. Anexo de Prints e Evidências ao Chamado
+    if (Array.isArray(images) && images.length > 0) {
+      await wait(250);
+      await attachImagesToJira(images);
+    }
+
+    const toastMsg = images && images.length > 0
+      ? `✔ Chamado preenchido e ${images.length} print(s) anexado(s)! Pronto para revisão.`
+      : '✔ Chamado preenchido com sucesso! Pronto para revisão.';
+
+    showFloatingToast(toastMsg, '🎉');
   }
 
   // Exponibiliza no escopo global para invocação direta do popup via executeScript

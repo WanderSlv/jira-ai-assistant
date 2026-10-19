@@ -32,6 +32,8 @@ test('GET / deve servir index.html com Tailwind e elementos da interface', async
   assert.ok(html.includes('contenteditable="true"'));
   assert.ok(html.includes('btnFmtUndo'));
   assert.ok(html.includes('btnFmtBold'));
+  assert.ok(html.includes('btnInsertEvidenceImg'));
+  assert.ok(html.includes('cardEvidenceSection'));
   assert.ok(html.includes('Ctrl+B'));
   assert.ok(html.includes('Ctrl+Z'));
   assert.ok(html.includes('script_generator.js'));
@@ -47,15 +49,16 @@ test('GET /styles.css deve retornar folha de estilos incluindo classes do rich-e
   assert.ok(css.includes('scroll-behavior: smooth'));
 });
 
-test('GET /script_generator.js deve retornar o gerador de scripts com htmlToMarkdown', async () => {
+test('GET /script_generator.js deve retornar o gerador de scripts com htmlToMarkdown e anexarImagensNoJira', async () => {
   const res = await fetch(`${baseUrl}/script_generator.js`);
   assert.strictEqual(res.status, 200);
   const js = await res.text();
   assert.ok(js.includes('generateJiraScript'));
   assert.ok(js.includes('htmlToMarkdown'));
+  assert.ok(js.includes('anexarImagensNoJira'));
 });
 
-test('GET /app.js deve retornar o script da aplicação com suporte a rich formatting e atalhos', async () => {
+test('GET /app.js deve retornar o script da aplicação com suporte a rich formatting, atalhos e evidências no card', async () => {
   const res = await fetch(`${baseUrl}/app.js`);
   assert.strictEqual(res.status, 200);
   const js = await res.text();
@@ -63,4 +66,6 @@ test('GET /app.js deve retornar o script da aplicação com suporte a rich forma
   assert.ok(js.includes('applyRichFormatting'));
   assert.ok(js.includes('autoScrollEditorDown'));
   assert.ok(js.includes('getStructuredDescription'));
+  assert.ok(js.includes('renderCardEvidenceGallery'));
+  assert.ok(js.includes('insertEvidenceImageIntoEditor'));
 });

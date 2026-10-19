@@ -101,7 +101,12 @@
     previewToggleIcon: document.getElementById('previewToggleIcon'),
     previewToggleText: document.getElementById('previewToggleText'),
     btnScrollBottom: document.getElementById('btnScrollBottom'),
-    ticketDescriptionPreview: document.getElementById('ticketDescriptionPreview')
+    ticketDescriptionPreview: document.getElementById('ticketDescriptionPreview'),
+    btnInsertEvidenceImg: document.getElementById('btnInsertEvidenceImg'),
+    cardEvidenceSection: document.getElementById('cardEvidenceSection'),
+    cardEvidenceBadge: document.getElementById('cardEvidenceBadge'),
+    cardEvidenceContainer: document.getElementById('cardEvidenceContainer'),
+    cardEvidenceEmpty: document.getElementById('cardEvidenceEmpty')
   };
 
   let toastTimeout = null;
@@ -239,7 +244,8 @@
     const script = generateJiraScript({
       titulo: state.title,
       descricao: state.description,
-      fields: state.currentFields
+      fields: state.currentFields,
+      images: state.evidenceImages
     });
 
     state.currentScript = script;
@@ -267,8 +273,21 @@
       };
       state.evidenceImages.push(newImg);
       renderEvidenceThumbnails();
+      renderCardEvidenceGallery();
+
+      // Implementa o print na descrição do card se já houver texto
+      const currentDesc = getStructuredDescription();
+      if (currentDesc) {
+        if (!currentDesc.includes('📸 Evidências') && !currentDesc.includes('Evidências & Prints')) {
+          setStructuredDescription(currentDesc.trim() + `\n\n📸 Evidências & Prints\n- [Print] ${newImg.name} (${newImg.size})`, false);
+        } else {
+          setStructuredDescription(currentDesc + `\n- [Print] ${newImg.name} (${newImg.size})`, false);
+        }
+      }
+
+      updateScriptPreview();
       syncTicketWithExtension(false);
-      showToast(`Print "${newImg.name}" anexado com sucesso!`, '📸');
+      showToast(`Print "${newImg.name}" implementado no card com sucesso!`, '📸');
     };
     reader.readAsDataURL(file);
   }
@@ -276,6 +295,8 @@
   function removeEvidenceImage(id) {
     state.evidenceImages = state.evidenceImages.filter(img => img.id !== id);
     renderEvidenceThumbnails();
+    renderCardEvidenceGallery();
+    updateScriptPreview();
     syncTicketWithExtension(false);
   }
 
@@ -316,6 +337,104 @@
         removeEvidenceImage(id);
       });
     });
+  }
+
+  // Renderiza a galeria de evidências integrada diretamente ao card (Seção 2)
+  function renderCardEvidenceGallery() {
+    if (!elements.cardEvidenceContainer) return;
+    const count = state.evidenceImages.length;
+
+    if (count === 0) {
+      if (elements.cardEvidenceEmpty) elements.cardEvidenceEmpty.classList.remove('hidden');
+      elements.cardEvidenceContainer.classList.add('hidden');
+      if (elements.cardEvidenceBadge) elements.cardEvidenceBadge.classList.add('hidden');
+      elements.cardEvidenceContainer.innerHTML = '';
+      return;
+    }
+
+    if (elements.cardEvidenceEmpty) elements.cardEvidenceEmpty.classList.add('hidden');
+    elements.cardEvidenceContainer.classList.remove('hidden');
+    if (elements.cardEvidenceBadge) {
+      elements.cardEvidenceBadge.classList.remove('hidden');
+      elements.cardEvidenceBadge.textContent = `${count} print${count > 1 ? 's' : ''}`;
+    }
+
+    elements.cardEvidenceContainer.innerHTML = state.evidenceImages.map(img => `
+      <div class="relative group rounded-xl overflow-hidden border border-slate-700 bg-slate-950 flex flex-col justify-between shadow-sm">
+        <div class="aspect-video w-full overflow-hidden bg-slate-900 flex items-center justify-center cursor-pointer relative" data-zoom-id="${img.id}" title="Clique para ampliar">
+          <img src="${img.dataUrl}" alt="${img.name}" class="w-full h-full object-cover group-hover:scale-105 transition-transform">
+          <div class="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+            <span class="text-[10px] bg-slate-900/90 text-white px-2 py-0.5 rounded-full border border-slate-700">🔍 Ver</span>
+          </div>
+        </div>
+        <div class="p-2 flex items-center justify-between gap-1 border-t border-slate-800/80 bg-slate-900/80">
+          <span class="text-[10px] text-slate-300 truncate font-mono flex-1" title="${img.name}">${img.name}</span>
+          <div class="flex items-center gap-1 shrink-0">
+            <button type="button" data-insert-id="${img.id}" class="btn-insert-card-img px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 transition-colors" title="Inserir print no texto da descrição">
+              ➕ Inserir
+            </button>
+            <button type="button" data-remove-id="${img.id}" class="btn-remove-card-img p-0.5 px-1 rounded text-[10px] bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 border border-rose-500/30 transition-colors" title="Remover do card">
+              ✕
+            </button>
+          </div>
+        </div>
+      </div>
+    `).join('');
+
+    elements.cardEvidenceContainer.querySelectorAll('.btn-insert-card-img').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = btn.getAttribute('data-insert-id');
+        const img = state.evidenceImages.find(i => i.id === id);
+        if (img) insertEvidenceImageIntoEditor(img);
+      });
+    });
+
+    elements.cardEvidenceContainer.querySelectorAll('.btn-remove-card-img').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = btn.getAttribute('data-remove-id');
+        removeEvidenceImage(id);
+      });
+    });
+
+    elements.cardEvidenceContainer.querySelectorAll('[data-zoom-id]').forEach(box => {
+      box.addEventListener('click', () => {
+        const id = box.getAttribute('data-zoom-id');
+        const img = state.evidenceImages.find(i => i.id === id);
+        if (img) {
+          const w = window.open('');
+          if (w) {
+            w.document.write(`<title>${img.name}</title><body style="margin:0;background:#0f172a;display:flex;align-items:center;justify-content:center;height:100vh;"><img src="${img.dataUrl}" style="max-width:95vw;max-height:95vh;border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,0.8);"></body>`);
+          }
+        }
+      });
+    });
+  }
+
+  // Insere uma imagem de evidência diretamente no editor de texto do card
+  function insertEvidenceImageIntoEditor(img) {
+    if (!img) return;
+    const ed = elements.ticketDescriptionEditor;
+    const ta = elements.ticketDescription;
+
+    if (ed && !ed.classList.contains('hidden')) {
+      ed.focus();
+      const imgHtml = `<p><img src="${img.dataUrl}" alt="${img.name}" style="max-width:100%; border-radius:8px; margin:8px 0; border: 1px solid #334155; display:block;" /></p><p><br></p>`;
+      const ok = document.execCommand('insertHTML', false, imgHtml);
+      if (!ok) {
+        ed.innerHTML += imgHtml;
+      }
+      syncEditorToState();
+      showToast(`Print "${img.name}" inserido no texto do card!`, '🖼️');
+    } else if (ta) {
+      const imgMd = `\n\n![${img.name}](${img.dataUrl})\n\n`;
+      const pos = ta.selectionStart || ta.value.length;
+      ta.value = ta.value.slice(0, pos) + imgMd + ta.value.slice(pos);
+      syncFieldsFromInputs();
+      updateScriptPreview();
+      showToast(`Print "${img.name}" inserido no texto do card!`, '🖼️');
+    }
   }
 
   // Obtém o conteúdo da Descrição Estruturada sempre convertido em Markdown limpo para o Jira
@@ -778,9 +897,15 @@
         elements.ticketTitle.value = data.titulo;
       }
       if (data.descricao) {
-        setStructuredDescription(data.descricao, true);
+        let desc = data.descricao;
+        if (state.evidenceImages.length > 0 && !desc.includes('📸 Evidências') && !desc.includes('Evidências & Prints')) {
+          const list = state.evidenceImages.map(img => `- [Print] ${img.name} (${img.size})`).join('\n');
+          desc = desc.trim() + `\n\n📸 Evidências & Prints\n${list}`;
+        }
+        setStructuredDescription(desc, true);
       }
 
+      renderCardEvidenceGallery();
       updateScriptPreview();
 
       // Exibe banner de status da geração
@@ -1133,6 +1258,17 @@
   if (elements.btnScrollBottom) {
     elements.btnScrollBottom.addEventListener('click', () => autoScrollEditorDown(true));
   }
+  if (elements.btnInsertEvidenceImg) {
+    elements.btnInsertEvidenceImg.addEventListener('click', () => {
+      if (state.evidenceImages.length === 0) {
+        showToast('Nenhum print anexado ainda. Cole com Ctrl+V ou anexe acima!', '⚠️');
+        if (elements.evidenceFileInput) elements.evidenceFileInput.click();
+        return;
+      }
+      const latestImg = state.evidenceImages[state.evidenceImages.length - 1];
+      insertEvidenceImageIntoEditor(latestImg);
+    });
+  }
 
   // Fechar modal ao clicar fora da caixa
   if (elements.googleAuthModal) {
@@ -1144,6 +1280,7 @@
   }
 
   // Inicialização
+  renderCardEvidenceGallery();
   loadPresets();
   loadConfig();
 })();

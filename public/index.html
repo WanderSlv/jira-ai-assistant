@@ -278,6 +278,12 @@
                 </button>
                 <div class="w-px h-3.5 bg-slate-800 mx-0.5"></div>
 
+                <!-- Inserir Print no Texto -->
+                <button type="button" id="btnInsertEvidenceImg" title="Inserir print/imagem de evidência na posição atual do texto" class="p-1 px-1.5 rounded hover:bg-slate-800 text-slate-300 hover:text-emerald-400 text-xs transition-colors flex items-center gap-1">
+                  <span>🖼️ Print</span>
+                </button>
+                <div class="w-px h-3.5 bg-slate-800 mx-0.5"></div>
+
                 <!-- Expandir Altura Completa -->
                 <button type="button" id="btnToggleExpand" title="Expandir/Compactar altura para leitura confortável" class="p-1 px-2 rounded hover:bg-slate-800 text-slate-300 hover:text-emerald-400 text-xs transition-colors flex items-center gap-1">
                   <span id="expandToggleIcon">↕</span>
@@ -321,6 +327,24 @@
               <button type="button" id="btnScrollBottom" class="text-emerald-400 hover:text-emerald-300 flex items-center gap-1 transition-colors select-none">
                 <span>⬇ Rolar para baixo</span>
               </button>
+            </div>
+          </div>
+
+          <!-- Mini-galeria de Evidências integradas ao Card -->
+          <div id="cardEvidenceSection" class="pt-3 border-t border-slate-800/80 space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                <span>📸</span>
+                <span>Evidências Integradas ao Card</span>
+                <span id="cardEvidenceBadge" class="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hidden">0 prints</span>
+              </span>
+              <span class="text-[11px] text-slate-400">Anexadas ao card e enviadas ao Jira</span>
+            </div>
+            <div id="cardEvidenceContainer" class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              <!-- Miniaturas das evidências geradas dinamicamente via app.js -->
+            </div>
+            <div id="cardEvidenceEmpty" class="text-xs text-slate-500 italic py-1 text-center bg-slate-950/40 rounded-xl border border-dashed border-slate-800/60 p-2.5">
+              Nenhuma imagem anexada a este card. Cole prints com <kbd class="px-1 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 text-[10px] font-mono">Ctrl+V</kbd> ou anexe acima para enriquecer o card.
             </div>
           </div>
         </div>

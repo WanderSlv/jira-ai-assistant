@@ -7,6 +7,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const lblRepr = document.getElementById('lblRepr');
   const lblChamado = document.getElementById('lblChamado');
   const btnFill = document.getElementById('btnFillActiveTab');
+  const evidenceContainer = document.getElementById('evidenceBadgeContainer');
+  const evidenceCountText = document.getElementById('evidenceCountText');
 
   let activeTicket = null;
 
@@ -14,6 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (res.currentTicket && res.currentTicket.titulo) {
       activeTicket = res.currentTicket;
       const f = activeTicket.fields || {};
+      const imgs = activeTicket.images || [];
 
       badge.className = 'badge';
       badge.textContent = 'Pronto para preencher';
@@ -26,10 +29,18 @@ document.addEventListener('DOMContentLoaded', () => {
       lblRepr.textContent = 'Wander';
       lblChamado.textContent = f.NumeroChamado || '-';
 
+      if (imgs.length > 0 && evidenceContainer && evidenceCountText) {
+        evidenceContainer.style.display = 'flex';
+        evidenceCountText.textContent = `${imgs.length} print${imgs.length > 1 ? 's' : ''} incluso${imgs.length > 1 ? 's' : ''} no card`;
+      } else if (evidenceContainer) {
+        evidenceContainer.style.display = 'none';
+      }
+
       btnFill.disabled = false;
     } else {
       badge.className = 'badge badge-empty';
       badge.textContent = 'Nenhum chamado';
+      if (evidenceContainer) evidenceContainer.style.display = 'none';
       btnFill.disabled = true;
     }
   });

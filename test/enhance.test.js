@@ -177,5 +177,7 @@ test('POST /api/enhance aceita evidências de imagens (prints em base64) no fall
   const data = await response.json();
   assert.ok(data.titulo);
   assert.ok(data.descricao);
+  assert.ok(data.descricao.includes('📸 Evidências & Prints'), 'Deve incluir seção de evidências na descrição do card');
+  assert.ok(data.descricao.includes('1 print(s)'), 'Deve indicar a quantidade de prints anexados');
   assert.strictEqual(data.fields.Representante, 'Wander');
 });
