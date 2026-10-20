@@ -10,6 +10,7 @@
 - [Instalação e Execução do Servidor](#-instalação-e-execução-do-servidor)
 - [Tutorial: Instalação da Extensão do Chrome](#-tutorial-instalação-da-extensão-do-chrome)
 - [Guia Passo a Passo: Como Utilizar a Ferramenta](#-guia-passo-a-passo-como-utilizar-a-ferramenta)
+- [Skill Antigravity: jira-card-creator](#-skill-antigravity-jira-card-creator)
 - [Campos Preenchidos Automaticamente no Jira](#-campos-preenchidos-automaticamente-no-jira)
 - [Solução de Dúvidas e Problemas Frequentes](#-solução-de-dúvidas-e-problemas-frequentes)
 - [Estrutura do Projeto](#-estrutura-do-projeto)
@@ -20,6 +21,7 @@
 ## ✨ Funcionalidades Principais
 
 - **Geração Canônica de Chamados**: Transforma explicações brutas, áudios transcritos ou logs em chamados técnicos no padrão oficial (Título canônico, Contexto, Comportamento Esperado, Comportamento Observado, Passos para Reprodução e Análise Técnica).
+- **Skill Nativa Google Antigravity (`jira-card-creator`)**: Integração direta com o agente de IA e a skill `nina-log-analysis`, convertendo investigações de incidentes e logs automaticamente em cards canônicos e permitindo criação direta via Jira MCP (`jira_create_issue`).
 - **Suporte a Multi-Provedores de IA**:
   - **Google Gemini**: Suporte nativo a `gemini-3.8-flash`, `gemini-1.5-flash`, `gemini-1.5-pro` ou modelos customizados com teste de chave integrado.
   - **Ollama Local**: Suporte a modelos locais offline (ex: `llama3`, `mistral`, `deepseek-r1`).
@@ -159,6 +161,30 @@ Na caixa **"Explicação Bruta"**, digite o relato informal do problema, cole lo
 
 ---
 
+## 🤖 Skill Antigravity: `jira-card-creator`
+
+O repositório inclui a skill oficial do Antigravity em [`.agents/skills/jira-card-creator`](.agents/skills/jira-card-creator/SKILL.md), projetada para atuar em conjunto com o `nina-log-analysis` (`analisa-log`).
+
+### Como Funciona:
+1. **Conversão de Diagnóstico de Logs em Chamados**: Transforma os 4 tópicos do diagnóstico (`Evidência`, `Interpretação`, `Confiança`, `Próxima verificação`) na estrutura oficial do card Jira (História & Contexto, Reprodução, Comportamento Atual/Esperado, Evidências/Logs e Análise Técnica).
+2. **Campos Obrigatórios Fixos**:
+   - `Representante do Cliente`: Wander (`712020:cd611e98-f544-49d8-8b38-030098aa7bfd`)
+   - `Produto`: NinaChat, HUB, Checkin, Plataforma, etc.
+   - `Cliente`: Detectado ou `Nina`
+   - `Número do Chamado`: ID da conversa ou `-`
+3. **Uso via CLI / Python**:
+   ```bash
+   # Gera o card em Markdown a partir de um diagnóstico:
+   python3 .agents/skills/jira-card-creator/scripts/create_card.py -f relatorio_diagnostico.md --project SD --type Bug
+
+   # Gera argumentos JSON para a ferramenta Jira MCP (jira_create_issue):
+   python3 .agents/skills/jira-card-creator/scripts/create_card.py -f relatorio_diagnostico.md --format mcp-args
+   ```
+4. **Criação Direta via Jira MCP**:
+   O agente Antigravity pode chamar a tool nativa `jira_create_issue` e criar o chamado diretamente no projeto `SD` ou `AUTO`.
+
+---
+
 ## 🎯 Campos Preenchidos Automaticamente no Jira
 
 | Campo no Formulário do Jira | Conteúdo Preenchido | Mecanismo de Preenchimento |
@@ -194,6 +220,12 @@ Na caixa **"Explicação Bruta"**, digite o relato informal do problema, cole lo
 
 ```text
 jira-ai-assistant/
+├── .agents/                      # Configurações e skills do Google Antigravity
+│   └── skills/jira-card-creator/ # Skill canônica de criação de cards Jira
+│       ├── SKILL.md             # Instruções e diretrizes operacionais da IA
+│       ├── scripts/             # Script CLI python de formatação e sanitização LGPD
+│       ├── references/          # Mapeamento de campos do Jira e templates oficiais
+│       └── examples/            # Exemplos práticos de conversão de diagnósticos
 ├── extension/                   # Extensão Manifest V3 para Chrome/Chromium
 │   ├── manifest.json            # Permissões, content_scripts e world: MAIN
 │   ├── content_jira.js          # Injetado no Jira para preenchimento e clique no React-Select
@@ -221,7 +253,7 @@ jira-ai-assistant/
 
 ## 🧪 Testes Automatizados
 
-Para executar todos os 27 testes automatizados da aplicação:
+Para executar todos os 30 testes automatizados da aplicação:
 
 ```bash
 npm test
