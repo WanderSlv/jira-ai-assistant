@@ -96,11 +96,15 @@ def extract_metadata_from_text(raw_text: str) -> Dict[str, Any]:
         meta["block"] = bloco_match.group(1).strip()
 
     # Busca cliente por palavras-chave ou rótulos
-    cli_match = re.search(r"(?:cliente|hospital|cl[íi]nica|empresa|conta)[:\s=]+([A-Za-z0-9_\- ]{2,30})", raw_text, re.IGNORECASE)
+    cli_match = re.search(r"(?:cliente|hospital|cl[íi]nica|empresa|conta)[:\s=]+([^\r\n]{2,60})", raw_text, re.IGNORECASE)
     if cli_match:
         c = cli_match.group(1).strip()
+        c = re.sub(r"[,\.;]+$", "", c).strip()
         if c.lower() not in {"que", "o", "a", "novo", "teste", "erro", "falha"}:
-            meta["client"] = c
+            if "sem acesso" in c.lower() or "não tem acesso" in c.lower() or "não identificada" in c.lower():
+                meta["client"] = "Sem acesso à informação da conta no log"
+            else:
+                meta["client"] = c
 
     # Busca produto
     text_lower = raw_text.lower()
