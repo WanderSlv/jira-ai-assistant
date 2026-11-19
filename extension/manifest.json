@@ -5,6 +5,7 @@
   "description": "Preenche chamados no Jira com 1-clique e seleciona opções do React-Select automaticamente.",
   "permissions": [
     "storage",
+    "unlimitedStorage",
     "activeTab",
     "scripting",
     "tabs"

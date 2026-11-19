@@ -217,6 +217,8 @@
     return extracted;
   }
 
+  let pendingSyncToastTimer = null;
+
   function syncTicketWithExtension(showToastMsg = false) {
     const desc = getStructuredDescription();
     const payload = {
@@ -227,15 +229,23 @@
       updatedAt: Date.now()
     };
 
+    if (showToastMsg) {
+      clearTimeout(pendingSyncToastTimer);
+      pendingSyncToastTimer = setTimeout(() => {
+        pendingSyncToastTimer = null;
+        showToast('Extensão não respondeu. Recarregue esta página (F5) se atualizou a extensão.', '⚠️', 4500);
+      }, 700);
+    }
+
     window.postMessage({
       type: 'JIRA_ASSISTANT_SAVE_TICKET',
       payload: payload
     }, '*');
-
-    if (showToastMsg) {
-      showToast('Chamado sincronizado com a Extensão do Jira! Abra o Jira para preencher.', '⚡', 3500);
-    }
   }
+
+  document.addEventListener('JIRA_ASSISTANT_REQUEST_TICKET', () => {
+    syncTicketWithExtension(false);
+  });
 
   function updateScriptPreview() {
     state.title = elements.ticketTitle.value;
@@ -252,7 +262,6 @@
     elements.codeOutput.textContent = script;
 
     syncTicketWithExtension(false);
-    updateMarkdownPreviewIfOpen();
   }
 
   // Manipulação de Evidências (Prints / Imagens)
@@ -906,6 +915,11 @@
       }
 
       renderCardEvidenceGallery();
+      if (data.updatedAt) {
+        lastSyncedCardTimestamp = Math.max(lastSyncedCardTimestamp, data.updatedAt);
+      } else {
+        lastSyncedCardTimestamp = Date.now();
+      }
       updateScriptPreview();
 
       // Exibe banner de status da geração
@@ -1118,6 +1132,18 @@
       if (elements.extensionStatusBadge) {
         elements.extensionStatusBadge.classList.remove('hidden');
       }
+    } else if (e.data.type === 'JIRA_ASSISTANT_SAVE_SUCCESS') {
+      if (pendingSyncToastTimer) {
+        clearTimeout(pendingSyncToastTimer);
+        pendingSyncToastTimer = null;
+        showToast('Chamado sincronizado com a Extensão do Jira! Abra o Jira para preencher.', '⚡', 3500);
+      }
+    } else if (e.data.type === 'JIRA_ASSISTANT_SAVE_ERROR') {
+      if (pendingSyncToastTimer) {
+        clearTimeout(pendingSyncToastTimer);
+        pendingSyncToastTimer = null;
+      }
+      showToast(`Erro ao sincronizar extensão: ${e.data.error || 'Recarregue a página (F5)'}`, '⚠️', 4500);
     }
   });
 
@@ -1279,8 +1305,52 @@
     });
   }
 
+  let lastSyncedCardTimestamp = 0;
+
+  function applyExternalSyncedCard(card) {
+    if (!card || !card.titulo || !card.updatedAt) return;
+    if (card.updatedAt <= lastSyncedCardTimestamp) return;
+    lastSyncedCardTimestamp = card.updatedAt;
+
+    if (card.fields) {
+      setInputsFromFields(card.fields);
+      syncFieldsFromInputs();
+    }
+    if (Array.isArray(card.images) && card.images.length > 0) {
+      state.evidenceImages = card.images;
+      renderCardEvidenceGallery();
+    }
+    elements.ticketTitle.value = card.titulo;
+    if (card.descricao) {
+      setStructuredDescription(card.descricao, true);
+    }
+    updateScriptPreview();
+
+    if (elements.aiStatusBanner && elements.aiStatusText) {
+      elements.aiStatusBanner.classList.remove('hidden');
+      elements.aiStatusText.textContent = '⚡ Card recebido diretamente via Skill/Terminal (sem custo de IA extra)';
+      if (elements.aiLatencyBadge) elements.aiLatencyBadge.textContent = 'direto';
+    }
+    showToast('Card recebido da Skill e sincronizado com a extensão!', '⚡', 3500);
+  }
+
+  async function pollLatestSyncedCard() {
+    try {
+      const res = await fetch('/api/latest-card');
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data && data.card) {
+        applyExternalSyncedCard(data.card);
+      }
+    } catch (e) {
+      // Ignora falhas momentâneas de rede
+    }
+  }
+
   // Inicialização
   renderCardEvidenceGallery();
   loadPresets();
   loadConfig();
+  pollLatestSyncedCard();
+  setInterval(pollLatestSyncedCard, 3000);
 })();

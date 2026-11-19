@@ -12,6 +12,13 @@ const ENV_FILE = path.join(__dirname, '.env');
 
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
+app.use('/api', (req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/api/presets', (req, res) => {
@@ -300,7 +307,7 @@ async function callOllama(prompt) {
 
 async function callGemini(apiKey, prompt, model, images = []) {
   const chosenModel = model || process.env.GEMINI_MODEL || 'gemini-3.8-flash';
-  const modelsToTry = [chosenModel, 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'].filter((m, i, arr) => arr.indexOf(m) === i);
+  const modelsToTry = [chosenModel, 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-2.5-flash'].filter((m, i, arr) => arr.indexOf(m) === i);
 
   let lastError = null;
 
@@ -357,6 +364,10 @@ async function callGemini(apiKey, prompt, model, images = []) {
         parsed = JSON.parse(cleaned);
       }
 
+      if (m !== chosenModel) {
+        console.log(`✔ [Gemini] Fallback para modelo ${m} bem-sucedido!`);
+      }
+
       return {
         titulo: parsed.titulo || parsed.title,
         descricao: formatDescricao(parsed.descricao || parsed.description),
@@ -383,9 +394,117 @@ function resolveFieldValue(extractedVal, llmVal, fallbackVal) {
   return fallbackVal;
 }
 
+// Armazena o último card enviado diretamente por skill/IA externa ou gerado via /api/enhance
+let latestSyncedCard = null;
+
+function saveLatestSyncedCard({ titulo, descricao, fields, images = [], type = 'bug', source = 'enhance' }) {
+  latestSyncedCard = {
+    titulo,
+    descricao,
+    fields: normalizeSyncedFields(fields || {}),
+    images: Array.isArray(images) ? images : [],
+    type,
+    source,
+    updatedAt: Date.now()
+  };
+  return latestSyncedCard;
+}
+
+function normalizeSyncedFields(fields = {}, fallback = {}) {
+  return {
+    Cliente: fields.Cliente || fields.cliente || fallback.Cliente || 'Nina',
+    Produto: fields.Produto || fields.produto || fallback.Produto || 'Geral',
+    Prioridade: fields.Prioridade || fields.prioridade || fallback.Prioridade || 'Baixo',
+    Representante: 'Wander',
+    NumeroChamado: fields.NumeroChamado || fields.numeroChamado || fields.chamado || fallback.NumeroChamado || '-'
+  };
+}
+
+app.get('/api/latest-card', (req, res) => {
+  res.json({ card: latestSyncedCard });
+});
+
+app.post('/api/sync-card', (req, res) => {
+  try {
+    const body = req.body || {};
+    const rawTitle = (body.titulo || body.title || '').toString().trim();
+    const rawDesc = (body.descricao || body.description || '').toString().trim();
+
+    if (!rawTitle || !rawDesc) {
+      return res.status(400).json({ error: 'titulo e descricao são obrigatórios para sincronizar o card diretamente' });
+    }
+
+    const normalizedFields = normalizeSyncedFields(body.fields || body.campos || {});
+    const images = Array.isArray(body.images) ? body.images : [];
+    const type = body.type || 'bug';
+
+    latestSyncedCard = {
+      titulo: rawTitle,
+      descricao: formatDescricao(rawDesc),
+      fields: normalizedFields,
+      images,
+      type,
+      source: body.source || 'skill',
+      updatedAt: Date.now()
+    };
+
+    console.log(`⚡ [Sync Direto] Card recebido sem chamada de IA extra: ${latestSyncedCard.titulo}`);
+    return res.json({ ok: true, card: latestSyncedCard });
+  } catch (err) {
+    console.error('Erro no endpoint /api/sync-card:', err);
+    return res.status(500).json({ error: 'Erro ao sincronizar card diretamente' });
+  }
+});
+
 app.post('/api/enhance', async (req, res) => {
   try {
-    const { type, rawText, fields, customApiKey, customModel, providerPreference, images = [] } = req.body || {};
+    const {
+      type,
+      rawText,
+      fields,
+      customApiKey,
+      customModel,
+      providerPreference,
+      images = [],
+      titulo,
+      title,
+      descricao,
+      description,
+      skipAI
+    } = req.body || {};
+
+    const preTitle = (titulo || title || '').toString().trim();
+    const preDesc = (descricao || description || '').toString().trim();
+
+    // Se a skill ou IA externa já enviou título e descrição estruturados, aplica direto sem chamar outra IA
+    if (preTitle && preDesc) {
+      const normalizedFields = normalizeSyncedFields(fields || {});
+      const formattedDesc = formatDescricao(preDesc);
+      latestSyncedCard = {
+        titulo: preTitle,
+        descricao: formattedDesc,
+        fields: normalizedFields,
+        images: Array.isArray(images) ? images : [],
+        type: type || 'bug',
+        source: 'skill',
+        updatedAt: Date.now()
+      };
+
+      console.log(`⚡ [Enhance Direto] Card pré-estruturado recebido (sem chamar Gemini/Ollama): ${preTitle}`);
+      return res.json({
+        titulo: preTitle,
+        descricao: formattedDesc,
+        fields: normalizedFields,
+        detectedFields: {
+          Cliente: normalizedFields.Cliente,
+          Produto: normalizedFields.Produto,
+          NumeroChamado: normalizedFields.NumeroChamado,
+          Representante: 'Wander'
+        },
+        provider: skipAI === false ? 'skill' : 'skill'
+      });
+    }
+
     if (!rawText || typeof rawText !== 'string' || !rawText.trim()) {
       return res.status(400).json({ error: 'rawText é obrigatório' });
     }
@@ -453,9 +572,19 @@ app.post('/api/enhance', async (req, res) => {
             NumeroChamado: resolveFieldValue(extracted.numeroChamado, resCampos.numeroChamado || resCampos.NumeroChamado || resCampos.chamado, initialNum)
           };
 
+          const card = saveLatestSyncedCard({
+            titulo: result.titulo,
+            descricao: result.descricao,
+            fields: finalFields,
+            images,
+            type: type || 'bug',
+            source: 'gemini'
+          });
+
           return res.json({
             ...result,
             fields: finalFields,
+            updatedAt: card.updatedAt,
             detectedFields: {
               Cliente: extracted.cliente || resCampos.cliente || null,
               Produto: extracted.produto || resCampos.produto || null,
@@ -486,9 +615,19 @@ app.post('/api/enhance', async (req, res) => {
           NumeroChamado: resolveFieldValue(extracted.numeroChamado, resCampos.numeroChamado || resCampos.NumeroChamado || resCampos.chamado, initialNum)
         };
 
+        const card = saveLatestSyncedCard({
+          titulo: result.titulo,
+          descricao: result.descricao,
+          fields: finalFields,
+          images,
+          type: type || 'bug',
+          source: 'ollama'
+        });
+
         return res.json({
           ...result,
           fields: finalFields,
+          updatedAt: card.updatedAt,
           detectedFields: {
             Cliente: extracted.cliente || resCampos.cliente || null,
             Produto: extracted.produto || resCampos.produto || null,
@@ -517,10 +656,23 @@ app.post('/api/enhance', async (req, res) => {
       ? `\n\n📸 Evidências & Prints\n- ${images.length} print(s) de evidência anexado(s) ao chamado para comprovação e análise visual do erro.`
       : '';
 
-    return res.json({
-      titulo: `[${initialProd}] - ${rawText.slice(0, 50).trim()}...`,
-      descricao: `📜 História & Contexto\nIdentificado durante a utilização do ${initialProd}.\n${rawText}\n\n🪲 Reprodução do bug\n1. Acessar o módulo ${initialProd}\n2. Executar a ação: ${rawText.slice(0, 80)}\n3. Observar a ocorrência do erro\n\n❌ Comportamento Atual\nO sistema apresentou falha durante a execução: "${rawText.slice(0, 120)}..."\n\n✅ Comportamento Esperado\nO sistema deve permitir a operação com sucesso sem apagar dados ou gerar erros inesperados.${fallbackEvidenceText}\n\n🧑‍💻 Análise Técnica\nProduto afetado: ${initialProd}\nCliente: ${initialCli}\nPrioridade: ${(fields && fields.Prioridade) || 'Baixo'}`,
+    const fallbackTitulo = `[${initialProd}] - ${rawText.slice(0, 50).trim()}...`;
+    const fallbackDescricao = `📜 História & Contexto\nIdentificado durante a utilização do ${initialProd}.\n${rawText}\n\n🪲 Reprodução do bug\n1. Acessar o módulo ${initialProd}\n2. Executar a ação: ${rawText.slice(0, 80)}\n3. Observar a ocorrência do erro\n\n❌ Comportamento Atual\nO sistema apresentou falha durante a execução: "${rawText.slice(0, 120)}..."\n\n✅ Comportamento Esperado\nO sistema deve permitir a operação com sucesso sem apagar dados ou gerar erros inesperados.${fallbackEvidenceText}\n\n🧑‍💻 Análise Técnica\nProduto afetado: ${initialProd}\nCliente: ${initialCli}\nPrioridade: ${(fields && fields.Prioridade) || 'Baixo'}`;
+
+    const fallbackCard = saveLatestSyncedCard({
+      titulo: fallbackTitulo,
+      descricao: fallbackDescricao,
       fields: finalFields,
+      images,
+      type: type || 'bug',
+      source: 'fallback'
+    });
+
+    return res.json({
+      titulo: fallbackTitulo,
+      descricao: fallbackDescricao,
+      fields: finalFields,
+      updatedAt: fallbackCard.updatedAt,
       detectedFields: {
         Cliente: extracted.cliente || null,
         Produto: extracted.produto || null,

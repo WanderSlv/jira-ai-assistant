@@ -181,3 +181,69 @@ test('POST /api/enhance aceita evidências de imagens (prints em base64) no fall
   assert.ok(data.descricao.includes('1 print(s)'), 'Deve indicar a quantidade de prints anexados');
   assert.strictEqual(data.fields.Representante, 'Wander');
 });
+
+test('POST /api/sync-card e GET /api/latest-card sincronizam card direto da skill sem chamar IA', async () => {
+  const badRes = await fetch(`${baseUrl}/api/sync-card`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ titulo: '' })
+  });
+  assert.strictEqual(badRes.status, 400);
+
+  const payload = {
+    titulo: '[NinaChat] - Timeout na integração Tasy',
+    descricao: '📜 História & Contexto\nErro reproduzido via skill.',
+    fields: {
+      Cliente: 'MULTIMED',
+      Produto: 'NinaChat',
+      Prioridade: 'Alto',
+      NumeroChamado: '98765'
+    }
+  };
+
+  const syncRes = await fetch(`${baseUrl}/api/sync-card`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  assert.strictEqual(syncRes.status, 200);
+  const syncData = await syncRes.json();
+  assert.strictEqual(syncData.ok, true);
+  assert.strictEqual(syncData.card.titulo, payload.titulo);
+  assert.strictEqual(syncData.card.fields.Representante, 'Wander');
+  assert.strictEqual(syncData.card.fields.Cliente, 'MULTIMED');
+
+  const latestRes = await fetch(`${baseUrl}/api/latest-card`);
+  assert.strictEqual(latestRes.status, 200);
+  const latestData = await latestRes.json();
+  assert.strictEqual(latestData.card.titulo, payload.titulo);
+  assert.strictEqual(latestData.card.fields.NumeroChamado, '98765');
+});
+
+test('POST /api/enhance com titulo e descricao pré-estruturados aplica direto sem chamar outra IA', async () => {
+  const payload = {
+    type: 'bug',
+    titulo: '[Checkin] - Falha no QRCode do totem',
+    descricao: '📜 História & Contexto\nCard já estruturado pela skill.',
+    skipAI: true,
+    fields: {
+      Cliente: 'Unimed',
+      Produto: 'Checkin',
+      Prioridade: 'Médio',
+      NumeroChamado: '554433'
+    }
+  };
+
+  const response = await fetch(`${baseUrl}/api/enhance`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  assert.strictEqual(response.status, 200);
+  const data = await response.json();
+  assert.strictEqual(data.provider, 'skill');
+  assert.strictEqual(data.titulo, payload.titulo);
+  assert.strictEqual(data.fields.Cliente, 'Unimed');
+  assert.strictEqual(data.fields.Representante, 'Wander');
+});

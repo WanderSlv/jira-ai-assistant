@@ -269,9 +269,12 @@ def build_canonical_card(
         "additional_fields": json.dumps(additional_fields, ensure_ascii=False)
     }
 
-    # Payload para a aplicação local Jira Assistant (http://localhost:3000/api/enhance)
+    # Payload direto para a aplicação local Jira Assistant (http://localhost:3000/api/sync-card ou /api/enhance sem IA extra)
     assistant_payload = {
         "type": "bug" if issue_type in ["Bug", "Hotfix"] else "feature",
+        "titulo": final_title,
+        "descricao": description,
+        "skipAI": True,
         "rawText": sanitized_text,
         "fields": {
             "Cliente": cli,
@@ -366,6 +369,12 @@ def main():
         action="store_true",
         help="Modo de simulação: exibe validação de campos e payload sem efetuar chamadas."
     )
+    parser.add_argument(
+        "--send", "--sync",
+        dest="send",
+        action="store_true",
+        help="Envia o card diretamente para o Jira Assistant local (http://localhost:3000/api/sync-card) sem chamar outra IA."
+    )
 
     args = parser.parse_args()
 
@@ -418,6 +427,22 @@ def main():
         print(f"✅ Card gerado e salvo em: {args.output}")
     else:
         print(out_content)
+
+    if args.send and not args.dry_run:
+        import urllib.request
+        import urllib.error
+        req = urllib.request.Request(
+            "http://localhost:3000/api/sync-card",
+            data=json.dumps(result["assistant_payload"], ensure_ascii=False).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                if resp.status == 200:
+                    print("\n⚡ Card sincronizado diretamente com o Jira Assistant & Extensão (sem chamada de IA extra)!")
+        except urllib.error.URLError as exc:
+            sys.stderr.write(f"\n⚠️ Não foi possível enviar para http://localhost:3000/api/sync-card: {exc}\n")
 
 
 if __name__ == "__main__":

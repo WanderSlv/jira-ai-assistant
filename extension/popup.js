@@ -12,9 +12,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let activeTicket = null;
 
-  chrome.storage.local.get(['currentTicket'], (res) => {
-    if (res.currentTicket && res.currentTicket.titulo) {
-      activeTicket = res.currentTicket;
+  function renderTicket(ticket) {
+    if (ticket && ticket.titulo) {
+      activeTicket = ticket;
       const f = activeTicket.fields || {};
       const imgs = activeTicket.images || [];
 
@@ -38,12 +38,81 @@ document.addEventListener('DOMContentLoaded', () => {
 
       btnFill.disabled = false;
     } else {
+      activeTicket = null;
       badge.className = 'badge badge-empty';
       badge.textContent = 'Nenhum chamado';
+      preview.textContent = 'Gere um chamado no Jira AI Assistant (localhost:3000) primeiro.';
+      fieldsGrid.style.display = 'none';
       if (evidenceContainer) evidenceContainer.style.display = 'none';
       btnFill.disabled = true;
     }
+  }
+
+  chrome.storage.local.get(['currentTicket', 'lastUpdated'], (res) => {
+    renderTicket(res.currentTicket);
+
+    // Busca também no servidor local caso a skill/IA tenha enviado um card via /api/sync-card
+    (async function syncFromLocalServer() {
+      for (const baseUrl of ['http://localhost:3000', 'http://127.0.0.1:3000']) {
+        try {
+          const resp = await fetch(`${baseUrl}/api/latest-card`, {
+            signal: AbortSignal.timeout(1200)
+          });
+          if (!resp.ok) continue;
+          const data = await resp.json();
+          const card = data && data.card;
+          if (card && card.titulo && (!res.lastUpdated || card.updatedAt > res.lastUpdated)) {
+            chrome.storage.local.set({
+              currentTicket: card,
+              lastUpdated: card.updatedAt || Date.now()
+            }, () => {
+              renderTicket(card);
+            });
+          }
+          break;
+        } catch (e) {
+          // Servidor local pode não estar rodando
+        }
+      }
+    })();
   });
+
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === 'local' && changes.currentTicket) {
+      renderTicket(changes.currentTicket.newValue);
+    }
+  });
+
+  // Sincroniza proativamente com a aba do Jira AI Assistant (localhost:3000) caso esteja aberta
+  (async function syncFromAssistantTab() {
+    try {
+      const tabs = await chrome.tabs.query({
+        url: ['http://localhost:3000/*', 'http://127.0.0.1:3000/*']
+      });
+      if (!tabs || tabs.length === 0) return;
+
+      const assistantTab = tabs[0];
+      if (!assistantTab || !assistantTab.id) return;
+
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: assistantTab.id },
+          files: ['content_assistant.js']
+        });
+      } catch (e) {
+        // Ignora se já estiver injetado ou sem permissão
+      }
+
+      await chrome.scripting.executeScript({
+        target: { tabId: assistantTab.id },
+        func: () => {
+          document.dispatchEvent(new CustomEvent('JIRA_ASSISTANT_REQUEST_TICKET'));
+        }
+      });
+    } catch (e) {
+      // Silencioso caso não haja aba do assistente aberta
+    }
+  })();
 
   function isJiraUrl(url) {
     if (!url) return false;
